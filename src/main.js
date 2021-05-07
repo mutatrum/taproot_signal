@@ -11,8 +11,6 @@ const image = new Image();
 const Twitter = require('./twitter.js');
 let twitter;
 
-const headers = [];
-
 module.exports = function(config) {
     bitcoin_rpc = new BitcoinRpc(config.bitcoind);
     twitter = new Twitter(config.twitter);
@@ -40,6 +38,7 @@ async function onSchedule() {
 
   logger.log(`Scanning ${elapsed} blocks`);
 
+  const headers = [];
   for (var block = since; block < since + elapsed; block++) {
 
     const blockHash = await bitcoin_rpc.getBlockHash(block)
