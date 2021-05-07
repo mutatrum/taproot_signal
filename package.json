@@ -1,0 +1,17 @@
+{
+  "name": "taproot_signal",
+  "version": "1.0.0",
+  "description": "",
+  "main": "taproot_signal.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "canvas": "^2.7.0",
+    "chroma-js": "^2.1.1",
+    "node-cron": "^3.0.0",
+    "twitter": "^1.7.1"
+  }
+}
