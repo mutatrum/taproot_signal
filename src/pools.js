@@ -9,7 +9,7 @@ module.exports = function() {
   const pools = JSON.parse(fs.readFileSync('pools.json'))
 
   this.getPool = function(transaction) {
-    for (const vout of transaction.vout) {
+    for (var vout of transaction.vout) {
       if (vout.value > 0) {
         const address = vout.scriptPubKey.addresses
         if (address) {
@@ -22,7 +22,7 @@ module.exports = function() {
     }
     
     const coinbase = Buffer.from(transaction.vin[0].coinbase, 'hex').toString();
-    for (const [tag, pool] of Object.entries(pools.coinbase_tags)) {
+    for (var [tag, pool] of Object.entries(pools.coinbase_tags)) {
       if (coinbase.indexOf(tag) != -1) {
         return pool.name
       }

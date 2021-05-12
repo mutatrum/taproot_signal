@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const fs = require('fs');
 
 const logger = require('./logger');
 
@@ -21,7 +22,7 @@ module.exports = function (config) {
 
   const START_HEIGHT = 681408;
 
-  const blocks = {}
+  var blocks = {}
   const knownPools = []
 
   this.run = async function () {
@@ -33,20 +34,50 @@ module.exports = function (config) {
 
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo()
 
+    // blockchainInfo.blocks = START_HEIGHT + 100;
+
     logger.log(`Current block: ${blockchainInfo.blocks}`)
 
-    for (var height = START_HEIGHT; height <= blockchainInfo.blocks; height++) {
-      const blockHash = await bitcoin_rpc.getBlockHash(height)
+    var start = START_HEIGHT
+    try {
+      blocks = JSON.parse(fs.readFileSync('blocks.json'))
+      start = Math.max.apply(null,Object.keys(blocks))
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        logger.log(`File not found, scanning from ${start}`);
+      } else {
+        throw err;
+      }
+    }    
 
-      const result = await processBlockHash(blockHash);
+    // logger.log(fs.stat('blocks.json'))
+    // fs.ex('blocks.json', JSON.stringify(blocks));
 
-      if (result.taproot) {
-        if (!knownPools.includes(result.pool)) {
-          knownPools.push(result.pool)
+    var total = blockchainInfo.blocks - start;
+
+    if (total > 0) {
+      logger.log(`Fetching ${total} blocks`)
+  
+      var i = 0;
+      for (var height = start; height <= blockchainInfo.blocks; height++) {
+        const blockHash = await bitcoin_rpc.getBlockHash(height)
+  
+        const result = await processBlockHash(blockHash);
+  
+        i++;
+        if (i % 100 == 0) {
+          logger.log(`Fetching ${Math.round(i / total * 100)}%`)
         }
       }
     }
 
+    for (var [height, block] of Object.entries(blocks)) {
+      if (block.taproot) {
+        if (!knownPools.includes(block.pool)) {
+          knownPools.push(block.pool)
+        }
+      }
+    }
     logger.log(`Known pools: ${knownPools}`)
 
     var sock = zmq.socket('sub')
@@ -69,16 +100,18 @@ module.exports = function (config) {
             var text = `🚨 NEW POOL 🚨\n\nTaproot signal by ${result.pool} in block ${result.height}`
 
             logger.log(`Tweet: ${text}`)
-            await postStatus(text)
+            // await postStatus(text)
           }
         }
+
+        fs.writeFileSync('blocks.json', JSON.stringify(blocks));
       }
     });
 
     // twitter.openStream(onTweet);
 
-    // onSchedule();
-    cron.schedule('0 */4 * * *', () => onSchedule());
+    onSchedule();
+    // cron.schedule('0 */4 * * *', () => onSchedule());
   }
 
   async function processBlockHash(blockHash) {
@@ -122,28 +155,28 @@ module.exports = function (config) {
     // const fs = require('fs');
     // fs.writeFileSync('image.png', buffer);
   
-    // countPools(statistics)
+    countPools(softfork.since, statistics)
   
-    await twitter.postStatus(text, buffer);
+    // await twitter.postStatus(text, buffer);
   }
   
   function hasTaproot(version) {
     return (version & 0xE0000004) == 0x20000004;
   }
   
-  // function countPools(statistics) {
-  //   var result = {}
-  //   for (var i = 0; i < statistics.elapsed; i++) {
-  //     var height = statistics.since + i;
-  //     var block = blocks[height];
-  //     if (block.taproot) {
-  //       if (!result[block.pool]) {
-  //         result[block.pool] = {
-  //           firstSignal: height
-  //         }
-  //       }
-  //     }
-  //   }
-  //   logger.log(JSON.stringify(result))
-  // }  
+  function countPools(since, statistics) {
+    var result = {}
+    for (var i = 0; i < statistics.elapsed; i++) {
+      var height = since + i;
+      var block = blocks[height];
+      if (block.taproot) {
+        if (!result[block.pool]) {
+          result[block.pool] = {
+            firstSignal: height
+          }
+        }
+      }
+    }
+    logger.log(JSON.stringify(result))
+  }  
 }
