@@ -2,6 +2,7 @@ module.exports = {
   bitcoind: {
     host: '',
     port: 8332,
+    zmqport: 28332, // zmqpubhashblock 
     username: '',
     password: ''
   },

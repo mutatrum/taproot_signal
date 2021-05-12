@@ -18,7 +18,7 @@ module.exports = function() {
   const COLORS_BLUE = chroma.scale(['#40a2f3','#1c77d0']).colors(DOT, format='num');
   const COLORS_GREY = chroma.scale(['#303030','#282828']).colors(DOT, format='num');
 
-  this.createImage = function(taproot, percentage) {
+  this.createImage = function(since, blocks, percentage) {
     var background = 0xff300a24;
     
     var width = getWidth();
@@ -55,7 +55,7 @@ module.exports = function() {
 
     drawBackground(pixels, background, WIDTH, width, height, ox, oy);
 
-    drawDots(pixels, taproot, WIDTH, ox, oy);
+    drawDots(pixels, since, blocks, WIDTH, ox, oy);
 
     imageData.data.set(new Uint8ClampedArray(buffer));
     ctx.putImageData(imageData, 0, 0);
@@ -119,15 +119,17 @@ module.exports = function() {
     }
   }
 
-  function drawDots(pixels, taproot, WIDTH, ox, oy) {
+  function drawDots(pixels, since, blocks, WIDTH, ox, oy) {
     var ax = 0, ay = 0, bx = 0, by = 0;
     
     for (var i = 0; i < 2016; i++) {
 
       var x = ox + (bx * (DOT + DOT_GAP));
       var y = oy + (by * (DOT + DOT_GAP));
+
+      var block = blocks[since + i];
       
-      var colors = i < taproot.length ? (taproot[i].hasTaprootSignal ? COLORS_BLUE : COLORS_ORANGE) : COLORS_GREY;
+      var colors = block ? (block.taproot ? COLORS_BLUE : COLORS_ORANGE) : COLORS_GREY;
       dot(pixels, WIDTH, x, y, colors);
       
       bx++;

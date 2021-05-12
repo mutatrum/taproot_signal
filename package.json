@@ -12,6 +12,7 @@
     "canvas": "^2.7.0",
     "chroma-js": "^2.1.1",
     "node-cron": "^3.0.0",
-    "twitter": "^1.7.1"
+    "twitter": "^1.7.1",
+    "zeromq": "^5.2.8"
   }
 }

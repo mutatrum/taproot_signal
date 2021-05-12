@@ -19,12 +19,14 @@ module.exports = function(config) {
       }
       logger.log(`in reply to @${screen_name}`);
     }
-    
-    var media = await postMediaUpload(twitter, imageData);
-    
+
     var status = {
-      status: text,
-      media_ids: media.media_id_string
+      status: text
+    }
+
+    if (imageData) {
+      var media = await postMediaUpload(twitter, imageData);
+      status.media_ids = media.media_id_string
     }
     
     if (in_reply_to) {

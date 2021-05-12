@@ -5,7 +5,9 @@ module.exports = function(config) {
     this.getNetworkInfo = () => request('getnetworkinfo', []);
     this.getBlockchainInfo = () => request('getblockchaininfo', []);
     this.getBlockHash = (block) => request('getblockhash', [block]);
-    this.getBlockHeader = (hash) => request('getblockheader', [hash]);
+    this.getBlockHeader = (hash) => request('getblockheader', [hash])
+    this.getBlock = (hash) => request('getblock', [hash]);
+    this.getRawTransaction = (txid, verbose, blockhash) => request('getrawtransaction', [txid, verbose, blockhash]);
     this.getWalletInfo = () => request('getwalletinfo', []);
     this.listTransactions = (count, skip, watchOnly) => request('listtransactions', ['*', count, skip, watchOnly]);
     this.listLabels = () => request('listlabels', []);
