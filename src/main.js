@@ -34,8 +34,6 @@ module.exports = function (config) {
 
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo()
 
-    // blockchainInfo.blocks = START_HEIGHT + 100;
-
     logger.log(`Current block: ${blockchainInfo.blocks}`)
 
     var start = START_HEIGHT
@@ -49,9 +47,6 @@ module.exports = function (config) {
         throw err;
       }
     }    
-
-    // logger.log(fs.stat('blocks.json'))
-    // fs.ex('blocks.json', JSON.stringify(blocks));
 
     var total = blockchainInfo.blocks - start;
 
@@ -100,7 +95,7 @@ module.exports = function (config) {
             var text = `🚨 NEW POOL 🚨\n\nTaproot signal by ${result.pool} in block ${result.height}`
 
             logger.log(`Tweet: ${text}`)
-            // await postStatus(text)
+            await postStatus(text)
           }
         }
 
@@ -110,8 +105,8 @@ module.exports = function (config) {
 
     // twitter.openStream(onTweet);
 
-    onSchedule();
-    // cron.schedule('0 */4 * * *', () => onSchedule());
+    // onSchedule();
+    cron.schedule('0 */4 * * *', () => onSchedule());
   }
 
   async function processBlockHash(blockHash) {
@@ -157,7 +152,7 @@ module.exports = function (config) {
   
     countPools(softfork.since, statistics)
   
-    // await twitter.postStatus(text, buffer);
+    await twitter.postStatus(text, buffer);
   }
   
   function hasTaproot(version) {
