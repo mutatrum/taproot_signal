@@ -34,6 +34,8 @@ module.exports = function (config) {
 
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo()
 
+    logger.log(JSON.stringify(blockchainInfo));
+
     logger.log(`Current block: ${blockchainInfo.blocks}`)
 
     var start = START_HEIGHT
@@ -129,8 +131,27 @@ module.exports = function (config) {
     const taproot = blockchainInfo.softforks.taproot;
     const softfork = taproot[taproot.type];
     const statistics = softfork.statistics;
-    const since = softfork.since;
-    const elapsed = statistics.elapsed;
+
+    logger.log(JSON.stringify(blockchainInfo))
+
+    var since = softfork.since;
+    while (since + statistics.period < blockchainInfo.blocks) {
+      since += statistics.period
+    }
+
+    // var elapsed = (blockchainInfo.blocks % 2016) + 1;
+    // var since = blockchainInfo.blocks - elapsed;
+    // if (elapsed == 0) {
+    //   since -= 2016;
+    //   elapsed = 2016;
+    // }
+    // var count = 0;
+    // for (var i = 0; i <= elapsed; i++) {
+    //   var result = blocks[since + i];
+    //   if (result.taproot) {
+    //     count++
+    //   }
+    // }
   
     const start_time = new Date(softfork.start_time * 1000).toISOString().split('T')[0];
     const timeout = new Date(softfork.timeout * 1000).toISOString().split('T')[0];
@@ -150,7 +171,7 @@ module.exports = function (config) {
     // const fs = require('fs');
     // fs.writeFileSync('image.png', buffer);
   
-    countPools(softfork.since, statistics)
+    // countPools(softfork.since, statistics)
   
     await twitter.postStatus(text, buffer);
   }
@@ -167,10 +188,39 @@ module.exports = function (config) {
       if (block.taproot) {
         if (!result[block.pool]) {
           result[block.pool] = {
-            firstSignal: height
+            firstSignal: height,
+            since: height,
+            fullSignal: 1,
+            count: 1,
+            blocks: '✅' 
           }
+        } else {
+          if (result[block.pool].fullSignal == 0) {
+            result[block.pool].since = height;
+          }
+          result[block.pool].fullSignal++;
+          result[block.pool].count++;
+          result[block.pool].blocks += '✅'
+        }
+      } else {
+        if (result[block.pool]) {
+          result[block.pool].lastNonSignal = height
+          result[block.pool].fullSignal = 0;
+          result[block.pool].blocks += '🛑'
         }
       }
+    }
+    for (var [pool, statistics] of Object.entries(result)) {
+      logger.log(`${pool}: ${statistics.blocks}`)
+      // if (statistics.lastNonSignal) {
+      //     if (statistics.fullSignal == 0) {
+      //       logger.log(`${pool}: first signal: ${statistics.since}: ${statistics.count} blocks`)
+      //     } else {
+      //       logger.log(`${pool}: first signal: ${statistics.firstSignal}, ${statistics.fullSignal} blocks since ${statistics.since}`)
+      //     }
+      // } else {
+      //   logger.log(`${pool}: since ${statistics.firstSignal}: ${statistics.fullSignal} blocks`)
+      // }
     }
     logger.log(JSON.stringify(result))
   }  

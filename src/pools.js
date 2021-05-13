@@ -3,8 +3,6 @@ const logger = require('./logger')
 
 module.exports = function() {
 
-  logger.log('Load pool data')
-
   // https://raw.githubusercontent.com/btccom/Blockchain-Known-Pools/master/pools.json
   const pools = JSON.parse(fs.readFileSync('pools.json'))
 
