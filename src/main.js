@@ -97,7 +97,7 @@ module.exports = function (config) {
             var text = `🚨 NEW POOL 🚨\n\nTaproot signal by ${result.pool} in block ${result.height}`
 
             logger.log(`Tweet: ${text}`)
-            await postStatus(text)
+            await twitter.postStatus(text)
           }
         }
 
