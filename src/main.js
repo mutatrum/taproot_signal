@@ -34,7 +34,7 @@ module.exports = function (config) {
 
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo()
 
-    logger.log(JSON.stringify(blockchainInfo));
+    // logger.log(JSON.stringify(blockchainInfo));
 
     logger.log(`Current block: ${blockchainInfo.blocks}`)
 
@@ -96,7 +96,7 @@ module.exports = function (config) {
 
             var text = `🚨 NEW POOL 🚨\n\nTaproot signal by ${result.pool} in block ${result.height}`
 
-            logger.log(`Tweet: ${text}`)
+            logger.log('Tweet:\n'+text)
             await twitter.postStatus(text)
           }
         }
@@ -132,7 +132,7 @@ module.exports = function (config) {
     const softfork = taproot[taproot.type];
     const statistics = softfork.statistics;
 
-    logger.log(JSON.stringify(blockchainInfo))
+    // logger.log(JSON.stringify(blockchainInfo))
 
     var since = softfork.since;
     while (since + statistics.period < blockchainInfo.blocks) {
@@ -156,22 +156,24 @@ module.exports = function (config) {
     const start_time = new Date(softfork.start_time * 1000).toISOString().split('T')[0];
     const timeout = new Date(softfork.timeout * 1000).toISOString().split('T')[0];
     const percentage = (statistics.count / statistics.elapsed * 100).toFixed(2) + '%';
+    const progress = (statistics.elapsed / statistics.period * 100).toFixed(2) + '%';
     const buffer = image.createImage(since, blocks, percentage);
   
-    var text = `Taproot signal blocks: ${statistics.count}/${statistics.elapsed} (${percentage})\n`;
-    text += `Blocks remaining: ${statistics.period - statistics.elapsed}\n`;
+    var text = `Taproot signal: ${statistics.count}/${statistics.elapsed} blocks (${percentage})\n`;
+    text += `Difficulty period: ${statistics.elapsed}/${statistics.period} blocks (${progress})\n`;
+    text += `Estimated signal: ${Math.round(statistics.count/statistics.elapsed*statistics.period)} blocks\n`
     if (statistics.possible) {
-      text += `Activation threshold: ${statistics.threshold} blocks.`
+      text += `Activation threshold: ${statistics.threshold} blocks`
     } else {
-      text += 'Activation is not possible this period.'
+      text += 'Activation is not possible this period'
     }
   
-    logger.log('Tweet: ' + text)
+    logger.log('Tweet:\n'+text)
   
     // const fs = require('fs');
     // fs.writeFileSync('image.png', buffer);
   
-    // countPools(softfork.since, statistics)
+    // countPools(blockchainInfo, statistics)
   
     await twitter.postStatus(text, buffer);
   }
@@ -180,48 +182,96 @@ module.exports = function (config) {
     return (version & 0xE0000004) == 0x20000004;
   }
   
-  function countPools(since, statistics) {
-    var result = {}
-    for (var i = 0; i < statistics.elapsed; i++) {
-      var height = since + i;
-      var block = blocks[height];
-      if (block.taproot) {
-        if (!result[block.pool]) {
-          result[block.pool] = {
-            firstSignal: height,
-            since: height,
-            fullSignal: 1,
-            count: 1,
-            blocks: '✅' 
-          }
-        } else {
-          if (result[block.pool].fullSignal == 0) {
-            result[block.pool].since = height;
-          }
-          result[block.pool].fullSignal++;
-          result[block.pool].count++;
-          result[block.pool].blocks += '✅'
+  function countPools(blockchainInfo, statistics) {
+
+    const PERIOD = 2016;
+    var result = new Map()
+
+    for (var i = 0; i < PERIOD; i++) {
+      var block = blocks[blockchainInfo.blocks - i]
+      var pool = result[block.pool]
+      if (!pool) {
+        pool = {pool: block.pool, count: 0, taproot: false}
+        result[block.pool] = pool;
+      }
+      pool.count++;
+      if (block.taproot){
+        if (!pool.taproot) {
+          logger.log(block.pool)
         }
-      } else {
-        if (result[block.pool]) {
-          result[block.pool].lastNonSignal = height
-          result[block.pool].fullSignal = 0;
-          result[block.pool].blocks += '🛑'
-        }
+        pool.taproot=true
       }
     }
-    for (var [pool, statistics] of Object.entries(result)) {
-      logger.log(`${pool}: ${statistics.blocks}`)
-      // if (statistics.lastNonSignal) {
-      //     if (statistics.fullSignal == 0) {
-      //       logger.log(`${pool}: first signal: ${statistics.since}: ${statistics.count} blocks`)
-      //     } else {
-      //       logger.log(`${pool}: first signal: ${statistics.firstSignal}, ${statistics.fullSignal} blocks since ${statistics.since}`)
-      //     }
-      // } else {
-      //   logger.log(`${pool}: since ${statistics.firstSignal}: ${statistics.fullSignal} blocks`)
-      // }
+
+    result = Object.values(result).sort(function(a, b) {
+      if (a.count != b.count) {
+        return b.count - a.count;
+      }
+      return a.pool.localeCompare(b.pool) 
+    });
+
+
+    // logger.log(JSON.stringify(result))
+    var s = 0;
+    for (e of result) {
+      if (e.taproot) {
+        logger.log(`${e.pool}: ${(e.count / PERIOD * 100).toFixed(2)}%`)
+        s += e.count;
+      }
     }
-    logger.log(JSON.stringify(result))
+    logger.log(`Total: ${(s / PERIOD * 100).toFixed(2)}%`)
+
+    logger.log('');
+    for (e of result) {
+      if (!e.taproot) {
+        logger.log(`${e.pool}: ${(e.count / PERIOD * 100).toFixed(2)}%`)
+      }
+    }
+
+
+
+
+    // var result = {}
+    // for (var i = 0; i < statistics.elapsed; i++) {
+    //   var height = since + i;
+    //   var block = blocks[height];
+    //   if (block.taproot) {
+    //     if (!result[block.pool]) {
+    //       result[block.pool] = {
+    //         firstSignal: height,
+    //         since: height,
+    //         fullSignal: 1,
+    //         count: 1,
+    //         blocks: '✅' 
+    //       }
+    //     } else {
+    //       if (result[block.pool].fullSignal == 0) {
+    //         result[block.pool].since = height;
+    //       }
+    //       result[block.pool].fullSignal++;
+    //       result[block.pool].count++;
+    //       result[block.pool].blocks += '✅'
+    //     }
+    //   } else {
+    //     if (result[block.pool]) {
+    //       result[block.pool].lastNonSignal = height
+    //       result[block.pool].fullSignal = 0;
+    //       result[block.pool].blocks += '🛑'
+    //     }
+    //   }
+    // }
+    // for (var [pool, statistics] of Object.entries(result)) {
+    //   logger.log(`${pool}: ${statistics.blocks}`)
+    //   // if (statistics.lastNonSignal) {
+    //   //     if (statistics.fullSignal == 0) {
+    //   //       logger.log(`${pool}: first signal: ${statistics.since}: ${statistics.count} blocks`)
+    //   //     } else {
+    //   //       logger.log(`${pool}: first signal: ${statistics.firstSignal}, ${statistics.fullSignal} blocks since ${statistics.since}`)
+    //   //     }
+    //   // } else {
+    //   //   logger.log(`${pool}: since ${statistics.firstSignal}: ${statistics.fullSignal} blocks`)
+    //   // }
+    // }
+    // logger.log(JSON.stringify(result))
   }  
 }
