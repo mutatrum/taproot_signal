@@ -15,6 +15,9 @@ let twitter;
 const Pools = require('./pools.js');
 let pools = new Pools();
 
+var finished = false;
+var previousCount = 0;
+
 const zmq = require('zeromq');
 module.exports = function (config) {
   bitcoin_rpc = new BitcoinRpc(config.bitcoind)
@@ -33,8 +36,6 @@ module.exports = function (config) {
     logger.log(`Connected to Bitcoin Core ${networkInfo.subversion} on ${config.bitcoind.host}`)
 
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo()
-
-    // logger.log(JSON.stringify(blockchainInfo));
 
     logger.log(`Current block: ${blockchainInfo.blocks}`)
 
@@ -80,6 +81,14 @@ module.exports = function (config) {
     var sock = zmq.socket('sub')
     var addr = `tcp://${config.bitcoind.host}:${config.bitcoind.zmqport}`
 
+    const taproot = blockchainInfo.softforks.taproot;
+    const softfork = taproot[taproot.type];
+    const statistics = softfork.statistics;
+    var since = softfork.since;
+    while (since + statistics.period < blockchainInfo.blocks) {
+      since += statistics.period
+    }
+
     sock.connect(addr)
 
     sock.subscribe('hashblock')
@@ -90,14 +99,101 @@ module.exports = function (config) {
         var result = await processBlockHash(blockHash)
         logger.log(`Block ${result.height} ${result.pool}: ${result.taproot ? '✅' : '🛑'}`)
 
+        if (finished) return;
+  
         if (result.taproot) {
           if (!knownPools.includes(result.pool)) {
             knownPools.push(result.pool)
 
             var text = `🚨 NEW POOL 🚨\n\nTaproot signal by ${result.pool} in block ${result.height}`
 
-            logger.log('Tweet:\n'+text)
             await twitter.postStatus(text)
+          }
+        }
+
+        var count = 0
+        for (var i = 0; i < 2016; i++) {
+          var block = blocks[since + i]
+          if (block && block.taproot) {
+            count++
+          }
+        }
+
+        logger.log(`Number of taproot blocks: ${count}`);
+
+        if (previousCount == count) {
+          if (count >= 1805) {
+            await twitter.postStatus(`Block ${result.height} go home. You're drunk`)
+          }
+          return
+        }
+        
+        previousCount = count;
+
+        switch (count) {
+          case 1615: {
+            logger.log(`Everything set to go, 200 blocks left.`)
+            break;
+          }
+          case 1715: {
+            await twitter.postStatus('We are 💯 taproot signalling blocks away from reaching the threshold of 1815 blocks for taproot lock-in.')
+            break;
+          }
+          case 1765: {
+            await twitter.postStatus('Only 50 more signalling blocks to reach lock-in threshold for taproot')
+            break;
+          }
+          case 1790: {
+            await twitter.postStatus('25 blocks to go. At 10 minutes a block that is roughly 4 hours.')
+            break;
+          }
+          case 1805: {
+            await twitter.postStatus('We are at T-🔟 blocks before lock-in.')
+            break;
+          }
+          case 1806: {
+            await twitter.postStatus('9️⃣ blocks to go.\n\nStay humble and stack sats.')
+            break;
+          }
+          case 1807: {
+            await twitter.postStatus('Only 8️⃣ blocks to go.\n\nThe Times 03/Jan/2009 Chancellor on brink of second bailout for banks')
+            break;
+          }
+          case 1808: {
+            await twitter.postStatus('7️⃣ more blocks.\n\nDiario El Salvador 09/Jun/2021 ASAMBLEA APRUEBA A LEY BITCOIN') 
+            break;
+          }
+          case 1809: {
+            await twitter.postStatus('6️⃣ blocks left.\n\nCraig Wright is a fraud.\nWe are all @hodlonaut.')
+            break;
+          }
+          case 1810: {
+            await twitter.postStatus('Only 5️⃣ blocks to go.\n\n#Bitcoin is freedom money.')
+            break;
+          }
+          case 1811: {
+            await twitter.postStatus('4️⃣ more blocks.\n\n“I want you to understand what it means to lose your freedom.”\n-- Ross Ulbricht\n\n#FreeRoss.')
+            break;
+          }
+          case 1812: {
+            await twitter.postStatus('3️⃣ blocks to go.')
+            break;
+          }
+          case 1813: {
+            await twitter.postStatus(`2️⃣ to go.`)
+            break;
+          }
+          case 1814: {
+            await twitter.postStatus(`1️⃣`)
+            break;
+          }
+          case 1815: {
+            var text = `🚨 TAPROOT LOCKED IN 🚨\n\nWith block ${result.height} signalling for taproot, there are 1815 signal blocks in the currency difficulty period.\n\nTaproot will activate in block 709632, somewhere in November this year.\n\nSo long, and thanks for all the fish.\n\nSee you all at @anyprevout.`
+            await twitter.postStatus(text)
+
+            finished = true
+            
+            break;
           }
         }
 
@@ -126,33 +222,19 @@ module.exports = function (config) {
   }
   
   async function onSchedule() {
+    if (finished) return;
+
     const blockchainInfo = await bitcoin_rpc.getBlockchainInfo();
   
     const taproot = blockchainInfo.softforks.taproot;
     const softfork = taproot[taproot.type];
     const statistics = softfork.statistics;
 
-    // logger.log(JSON.stringify(blockchainInfo))
-
     var since = softfork.since;
     while (since + statistics.period < blockchainInfo.blocks) {
       since += statistics.period
     }
 
-    // var elapsed = (blockchainInfo.blocks % 2016) + 1;
-    // var since = blockchainInfo.blocks - elapsed;
-    // if (elapsed == 0) {
-    //   since -= 2016;
-    //   elapsed = 2016;
-    // }
-    // var count = 0;
-    // for (var i = 0; i <= elapsed; i++) {
-    //   var result = blocks[since + i];
-    //   if (result.taproot) {
-    //     count++
-    //   }
-    // }
-  
     const start_time = new Date(softfork.start_time * 1000).toISOString().split('T')[0];
     const timeout = new Date(softfork.timeout * 1000).toISOString().split('T')[0];
     const percentage = (statistics.count / statistics.elapsed * 100).toFixed(2) + '%';
@@ -168,8 +250,6 @@ module.exports = function (config) {
       text += 'Activation is not possible this period'
     }
   
-    logger.log('Tweet:\n'+text)
-  
     // const fs = require('fs');
     // fs.writeFileSync('image.png', buffer);
   
@@ -181,97 +261,4 @@ module.exports = function (config) {
   function hasTaproot(version) {
     return (version & 0xE0000004) == 0x20000004;
   }
-  
-  function countPools(blockchainInfo, statistics) {
-
-    const PERIOD = 2016;
-    var result = new Map()
-
-    for (var i = 0; i < PERIOD; i++) {
-      var block = blocks[blockchainInfo.blocks - i]
-      var pool = result[block.pool]
-      if (!pool) {
-        pool = {pool: block.pool, count: 0, taproot: false}
-        result[block.pool] = pool;
-      }
-      pool.count++;
-      if (block.taproot){
-        if (!pool.taproot) {
-          logger.log(block.pool)
-        }
-        pool.taproot=true
-      }
-    }
-
-    result = Object.values(result).sort(function(a, b) {
-      if (a.count != b.count) {
-        return b.count - a.count;
-      }
-      return a.pool.localeCompare(b.pool) 
-    });
-
-
-    // logger.log(JSON.stringify(result))
-    var s = 0;
-    for (e of result) {
-      if (e.taproot) {
-        logger.log(`${e.pool}: ${(e.count / PERIOD * 100).toFixed(2)}%`)
-        s += e.count;
-      }
-    }
-    logger.log(`Total: ${(s / PERIOD * 100).toFixed(2)}%`)
-
-    logger.log('');
-    for (e of result) {
-      if (!e.taproot) {
-        logger.log(`${e.pool}: ${(e.count / PERIOD * 100).toFixed(2)}%`)
-      }
-    }
-
-
-
-
-    // var result = {}
-    // for (var i = 0; i < statistics.elapsed; i++) {
-    //   var height = since + i;
-    //   var block = blocks[height];
-    //   if (block.taproot) {
-    //     if (!result[block.pool]) {
-    //       result[block.pool] = {
-    //         firstSignal: height,
-    //         since: height,
-    //         fullSignal: 1,
-    //         count: 1,
-    //         blocks: '✅' 
-    //       }
-    //     } else {
-    //       if (result[block.pool].fullSignal == 0) {
-    //         result[block.pool].since = height;
-    //       }
-    //       result[block.pool].fullSignal++;
-    //       result[block.pool].count++;
-    //       result[block.pool].blocks += '✅'
-    //     }
-    //   } else {
-    //     if (result[block.pool]) {
-    //       result[block.pool].lastNonSignal = height
-    //       result[block.pool].fullSignal = 0;
-    //       result[block.pool].blocks += '🛑'
-    //     }
-    //   }
-    // }
-    // for (var [pool, statistics] of Object.entries(result)) {
-    //   logger.log(`${pool}: ${statistics.blocks}`)
-    //   // if (statistics.lastNonSignal) {
-    //   //     if (statistics.fullSignal == 0) {
-    //   //       logger.log(`${pool}: first signal: ${statistics.since}: ${statistics.count} blocks`)
-    //   //     } else {
-    //   //       logger.log(`${pool}: first signal: ${statistics.firstSignal}, ${statistics.fullSignal} blocks since ${statistics.since}`)
-    //   //     }
-    //   // } else {
-    //   //   logger.log(`${pool}: since ${statistics.firstSignal}: ${statistics.fullSignal} blocks`)
-    //   // }
-    // }
-    // logger.log(JSON.stringify(result))
-  }  
 }

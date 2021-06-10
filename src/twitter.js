@@ -6,6 +6,8 @@ module.exports = function(config) {
   const twitter = new Twitter(config);
 
   this.postStatus = async function(text, imageData, in_reply_to) {
+    logger.log(`Tweet:\n${text}`)
+
     if (in_reply_to) {
       var reply = await getStatusesShow(twitter, in_reply_to);
       screen_name = reply.user.screen_name;
