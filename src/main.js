@@ -16,7 +16,6 @@ const Pools = require('./pools.js');
 let pools = new Pools();
 
 var finished = false;
-var previousCount = 0;
 
 const zmq = require('zeromq');
 module.exports = function (config) {
@@ -121,15 +120,10 @@ module.exports = function (config) {
 
         logger.log(`Number of taproot blocks: ${count}`);
 
-        if (previousCount == count) {
-          if (count >= 1805) {
-            await twitter.postStatus(`Block ${result.height} go home. You're drunk`)
-          }
-          return
+        if (count >= 1790 && !result.taproot) {
+          await twitter.postStatus(`Block ${result.height}: 🟦.\n\nYou're drunk, ${result.pool}. Go home.`)
         }
         
-        previousCount = count;
-
         switch (count) {
           case 1615: {
             logger.log(`Everything set to go, 200 blocks left.`)
