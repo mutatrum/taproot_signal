@@ -120,8 +120,11 @@ module.exports = function (config) {
 
         logger.log(`Number of taproot blocks: ${count}`);
 
-        if (count >= 1790 && !result.taproot) {
-          await twitter.postStatus(`Block ${result.height}: 🟦.\n\nYou're drunk, ${result.pool}. Go home.`)
+        if (!result.taproot) {
+          if (count >= 1790) {
+            await twitter.postStatus(`Block ${result.height}: 🟦\n\nYou're drunk, ${result.pool}. Go home.`)
+          }
+          return;
         }
         
         switch (count) {
