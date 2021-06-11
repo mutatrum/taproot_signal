@@ -140,11 +140,11 @@ module.exports = function (config) {
             break;
           }
           case 1765: {
-            await twitter.postStatus('Only 50 more signalling blocks to reach lock-in threshold for taproot')
+            await twitter.postStatus('Only 5️⃣0️⃣ more signalling blocks to reach lock-in threshold for taproot')
             break;
           }
           case 1790: {
-            await twitter.postStatus('25 blocks to go. At 10 minutes a block that is roughly 4 hours.')
+            await twitter.postStatus('2️⃣5️⃣ blocks to go. At 10 minutes a block that is roughly 4 hours.')
             break;
           }
           case 1805: {
