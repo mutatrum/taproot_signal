@@ -191,7 +191,7 @@ module.exports = function (config) {
 
             const buffer = image.createImage(since, blocks, 'SIGFORK');
 
-            var text = `🚨 TAPROOT LOCKED IN 🚨\n\nWith block ${result.height} signalling for taproot, there are 1815 signal blocks in the currency difficulty period.\n\nTaproot will activate in block 709632, somewhere in November this year.\n\nSo long, and thanks for all the fish.\n\nSee you all at @anyprevout.`
+            var text = `🚨 TAPROOT LOCKED IN 🚨\n\nWith block ${result.height} signalling for taproot, there are 1815 signalling blocks in the currency difficulty period.\n\nTaproot will activate in block 709632, somewhere in November 2021.\n\nSo long, and thanks for all the fish.\n\nSee you all at @anyprevout.`
             await twitter.postStatus(text, buffer)
 
             finished = true
