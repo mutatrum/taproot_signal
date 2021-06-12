@@ -144,6 +144,10 @@ module.exports = function (config) {
             await twitter.postStatus('2️⃣5️⃣ blocks to go. At 10 minutes a block that is roughly 4 hours.')
             break;
           }
+          case 1800: {
+            await twitter.postStatus('1️⃣5️⃣ block left. Objects in rear view mirror are closer than they appear. 🦕 🦖')
+            break;
+          }
           case 1805: {
             await twitter.postStatus('We are at T-🔟 blocks before lock-in. 🚀')
             break;
