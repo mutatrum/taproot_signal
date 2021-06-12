@@ -122,7 +122,7 @@ module.exports = function (config) {
 
         if (!result.taproot) {
           if (count >= 1790) {
-            await twitter.postStatus(`Block ${result.height}: 🟦\n\nYou're drunk, ${result.pool}. Go home.`)
+            await twitter.postStatus(`Block ${result.height}: 🟦.\n\nYou're drunk, ${result.pool}. Go home.`)
           }
           return;
         }
@@ -145,11 +145,11 @@ module.exports = function (config) {
             break;
           }
           case 1805: {
-            await twitter.postStatus('We are at T-🔟 blocks before lock-in.')
+            await twitter.postStatus('We are at T-🔟 blocks before lock-in. 🚀')
             break;
           }
           case 1806: {
-            await twitter.postStatus('9️⃣ blocks to go.\n\nStay humble and stack sats.')
+            await twitter.postStatus('9️⃣ blocks to go.\n\nStay humble. Stack sats.\n-- @ODELL')
             break;
           }
           case 1807: {
@@ -173,11 +173,11 @@ module.exports = function (config) {
             break;
           }
           case 1812: {
-            await twitter.postStatus('3️⃣ blocks to go.')
+            await twitter.postStatus('3️⃣ blocks to go.\n\nBitcoin is a weapon of mass construction.')
             break;
           }
           case 1813: {
-            await twitter.postStatus(`2️⃣ to go.`)
+            await twitter.postStatus(`2️⃣ to go.\n\nLET'S GO!`)
             break;
           }
           case 1814: {
