@@ -177,7 +177,7 @@ module.exports = function (config) {
             break;
           }
           case 1812: {
-            await twitter.postStatus('3️⃣ blocks to go.\n\nBitcoin is a weapon of mass construction.')
+            await twitter.postStatus('3️⃣ blocks to go.\n\n#Bitcoin is a weapon of mass construction.')
             break;
           }
           case 1813: {
