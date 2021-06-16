@@ -7,6 +7,7 @@ const Twitter = require('./src/twitter.js');
 const twitter = new Twitter(config.twitter);
 
 const https = require('https');
+const cron = require('node-cron');
 
 (async function () {
 
