@@ -18,6 +18,7 @@ const { createCanvas } = require('canvas');
 })()
 
 async function onSchedule() {
+  logger.log('start')
 
   var uaInfo = await getUAInfo();
   var piedata = loadData(uaInfo)
@@ -46,6 +47,8 @@ async function onSchedule() {
   var buffer = createImage(piedata, total)
 
   await twitter.postStatus(text, buffer);
+
+  logger.log('finished')
 }
 
 function createImage(piedata, total) {
@@ -380,22 +383,25 @@ function loadData(uainfo) {
     if (corever) {
       v = corever;
   
-    // Latest version this graph has been updated to
-    if (vercmp(v, [[0,21,1,0]]) > 0) {
-      flag('unknown', n);
-      continue;
-    }
-    
-    if (cn == 'Bitcoin Core' && vercmp(v, [[0,21,1,0]]) == 0) {  // ST
-      flag('taproot', n);
-      continue;
-    }
-    
-    if (vercmp(v, [[0,21,1,0]]) < 0) {
-      flag('none', n);
-      continue;
-    }
-  
+      // Latest version this graph has been updated to
+      if (vercmp(v, [[22,0,0,0]]) > 0) {
+        flag('unknown', n);
+        continue;
+      }
+
+      if (cn == 'Bitcoin Core' && vercmp(v, [[0,21,1,0]]) == 0) {  // ST
+        flag('taproot', n);
+        continue;
+      }
+      if (cn == 'Bitcoin Core' && vercmp(v, [[22,0,0,0]]) == 0) {  // ST
+        flag('taproot', n);
+        continue;
+      }
+
+      if (vercmp(v, [[0,21,1,0]]) < 0) {
+        flag('none', n);
+        continue;
+      }
     }
     
     flag('unknown', n);
