@@ -14,21 +14,19 @@ const { createCanvas } = require('canvas');
 
   logger.log('init')
 
-  cron.schedule('0 */8 * * *', () => onSchedule());
+  onSchedule()
+  // cron.schedule('0 */8 * * *', () => onSchedule());
 })()
 
 async function onSchedule() {
   logger.log('start')
 
-  var uaInfo = await getUAInfo();
+  var uaInfo = await getUAInfo()
   var piedata = loadData(uaInfo)
   
   logger.log(JSON.stringify(piedata))
 
-  var total = 0;
-  for (var [name, count] of Object.entries(piedata)) {
-    total += count;
-  }
+  var total = Object.values(piedata).reduce((a, c) => a + c)
   var percentage = piedata['Taproot'] / total * 100;
 
   var text = `Bitcoin Node Taproot Support: ${percentage.toFixed(2)}%\n`;
@@ -130,285 +128,57 @@ function getUAInfo() {
   });
 }
 
-// Source from https://luke.dashjr.org/programs/bitcoin/files/charts/taproot.html
 function loadData(uainfo) {
-  var piedatagrp = [
-    'taproot',
-    'none',
-    'non-full',
-    'unknown',
-  ];
-  var grplabel = {
-    none: 'Non-enforcing',
-    "non-full": 'Light',
-    taproot: 'Taproot',
-    unknown: 'Unknown',
-  };
-  var piedata = {};
+  var result = {'Taproot': 0, 'Non-enforcing': 0, 'Light': 0, 'Unknown': 0}
 
-  var i, tot = 0, ua;
-  function flag(t, n) {
-    piedata[t] += n;
-    tot += n;
+  for (const [useragent, info] of Object.entries(uainfo)) {
+  
+    if (info.listening == 0) continue; // Skip non-listening nodes
+  
+    const count = info.listening + info.est_unreachable
+    const key = getKey(useragent)
+  
+    console.log(`${count.toString().padStart(8, ' ')} ${useragent} ${key}`)
+    result[key] += count
   }
   
-  function autoflag_a(n, v, current_versions, type) {
-    if (vercmp(v, current_versions) > 0) {
-      flag(type, n);
-    } else {
-      flag('none', n);
-    }
-  }
-  
-  function vercmp(a, b) {
-    var cs, bs, isHigher;
-    bs = b;
-    for (var i = 0; i < 4; ++i) {
-      if (a[i] < bs[0][i]) {
-        return -1;
-      }
-      if (a[i] == bs[0][i] && i == 3) {
-        return 0;
-      }
-      cs = [];
-      isHigher = false;
-      for (var j = 0; j < bs.length; ++j) {
-        if (bs[j][i] == a[i]) {
-          cs.push(bs[j]);
-        }
-        else
-        if (bs[j][i] > a[i]) {
-          isHigher = true;
-        }
-      }
-      if (cs.length == 0)
-        return isHigher ? -1 : 1;
-      bs = cs;
-    }
-    return NaN;
-  }
-  
-  // Lowercase list of non-full node UAs
-  var nonfull_uas = [
-    // Pseudo-SPV
-    'bitcoinj',
-    'bitcoin wallet for android',
-    'bither',
-    'bitsquare',
-    'breadwallet',
-    'multibit',
-    'multibit hd',
-    
-    // Fails to implement all rules
-    'therealbitcoin.org',
-    
-    // Contentious "hardforks"
-    'bitcoin unlimited',
-    'bitcoin xt',
-    'bitcoin classic',
-  ];
-  
-  var coreversioning_uas = [
-    'bitcoin xt',
-    'satoshi rbf',
-    'bitcoin core',
-  ];
-  
-  for (var i = 0; i < piedatagrp.length; ++i) {
-    piedata[piedatagrp[i]] = 0;
-  }
-  
-  var info, n, cn, pv, v, j, uac;
-  
-  var all_uas = []
-  var incl_unreachable = true;//!getQueryVariable('onlylistening', false);
-  var skip_no_listeners = true;//getQueryVariable('skip_no_listeners', false);
-  if (null == skip_no_listeners) {
-    skip_no_listeners = true;
-  } else {
-    skip_no_listeners = JSON.parse(skip_no_listeners);
-  }
-  for (ua in uainfo) {
-    if (!uainfo.hasOwnProperty(ua)) {
-      continue;
-    }
-    var this_ua_info = uainfo[ua];
-    
-    if (this_ua_info['listening'] == 0 && skip_no_listeners) {
-      continue;
-    }
-    
-    this_ua_info['n'] = this_ua_info['listening'];
-    if (incl_unreachable) {
-      this_ua_info['n'] += this_ua_info['est_unreachable'];
-    }
-    
-    all_uas.push(ua);
-  }
-  
-  all_uas.sort(function(a, b){
-    return uainfo[b]['n'] - uainfo[a]['n'];
-  });
-  
-  var simple_uas = [
-    'bcoin',
-    'bitcoin xt',
-    'bitcore',
-    'bither',
-    'bitsquare',
-    'breadwallet',
-    'gocoin',
-    'libbitcoin',
-    'multibit',
-    'therealbitcoin.org',
-    'satoshi rbf',
-  ];
-  var mappable_uas = {
-    'bitcoin-qt': 'Bitcoin Core',
-    'satoshi': 'Bitcoin Core',
-    'bitcoinunlimited': 'Bitcoin Unlimited',
-    'btcd': 'btcsuite',
-    'btcwire': 'btcsuite',
-    'knots': 'Bitcoin Knots',
-    'next': 'Bitcoin Knots',
-    'next-test': 'Bitcoin Knots',
-    'ljr': 'Bitcoin Knots',
-    'eligius': 'Bitcoin Knots',
-    'multibithd': 'MultiBit HD',
-  };
-  
-  function ver_postprocess(v) {
-    while (v.length < 4) {
-      v.push(0);
-    }
-    for (j = 1; j < v.length; ++j) {
-      v[j] = parseInt(v[j], 10);
-      if (v[j] > 90) {
-        ++v[j-1];
-        v[j] -= 100;
-      }
-    }
-  }
-  
-  ualoop:
-  for (i = 0; i < all_uas.length; ++i) {
-    var ua = all_uas[i];
-    var n = uainfo[ua]['n'];
-    
-    var ua_split = ua.split(/\//);
-    
-    var cn = '';
-    var v = [-1,-1,-1,-1];
-    
-    var is_bitcoinj = false;
-    var corever = null;
-    for (j = 0; j < ua_split.length; ++j) {
-      var uacc = ua_split[j].split(':');
-      var uac = uacc[0];
-      var uac_lc = uac.toLowerCase();
-      if (uac_lc == 'withtaproot') {
-        flag('taproot', n);
-        continue ualoop;
-      } else
-      if (simple_uas.indexOf(uac_lc) > -1) {
-        cn = uac;
-      } else
-      if (uac_lc == 'bitcoinj') {
-        is_bitcoinj = true;
-      } else
-      if (is_bitcoinj && uac == 'Bitcoin Wallet') {
-        cn = 'Bitcoin Wallet for Android';
-      } else
-      if (uac.match(/^Bither1\.[\d.]+$/)) {
-        cn = 'Bither';
-      } else
-      if (uac_lc in mappable_uas) {
-        cn = mappable_uas[uac_lc];
-      } else
-      if (uac == 'Classic' && !is_bitcoinj) {
-        cn = 'Bitcoin Classic';
-      } else {
-        continue;
-      }
-      var orig_cn = uac;
-      if (uacc.length > 1) {
-        v = uacc[1].split(/\./);
-      } else {
-        v = [];
-      }
-      if (coreversioning_uas.indexOf(cn.toLowerCase()) > -1) {
-        corever = v.slice();  // copy
-      }
-    }
-    ver_postprocess(v);
-    if (corever) {
-      ver_postprocess(corever);
-    }
-    
-    if (cn == '') {
-      flag('unknown', n);
-      continue;
-    }
-    
-    if (orig_cn == 'bcoin') {
-      autoflag_a(n, v, [[2,1,2,0]], 'unknown');
-      continue;
-    }
-    if (orig_cn == 'btcd') {
-      autoflag_a(n, v, [[0,21,0,0]], 'unknown');
-      continue;
-    }
-    if (orig_cn == 'btcwire') {
-      autoflag_a(n, v, [[0,2,0,0]], 'unknown');
-      continue;
-    }
-    if (orig_cn == 'Gocoin') {
-      autoflag_a(n, v, [[1,9,8,0]], 'unknown');
-      continue;
-    }
-    if (cn == 'libbitcoin') {
-      autoflag_a(n, v, [[3,6,0,0]], 'unknown');
-      continue;
-    }
-    
-    if (cn == 'Bitcoin XT' && vercmp(v, [[0,11,-10,0]]) < 0) {
-      // For consensus purposes, this was the same as Core
-      cn = 'Bitcoin Core';
-    }
-    if (nonfull_uas.indexOf(cn.toLowerCase()) > -1) {
-      flag('non-full', n);
-      continue;
-    }
-    
-    if (corever) {
-      v = corever;
-  
-      // Latest version this graph has been updated to
-      if (vercmp(v, [[22,0,0,0]]) > 0) {
-        flag('unknown', n);
-        continue;
-      }
+  return result
+}
 
-      if (cn == 'Bitcoin Core' && vercmp(v, [[0,21,1,0]]) == 0) {  // ST
-        flag('taproot', n);
-        continue;
+function getKey(useragent) {
+  const useragents = useragent.split('/').filter(Boolean)
+  const rootagent = useragents[0].split(':')
+  const rootbrand = rootagent[0]
+  switch(rootbrand) {
+    case 'Satoshi':
+      const rootversion = rootagent[1].split('.')
+      if (rootversion[0] == 0)
+        rootversion.shift()
+      const major = rootversion[0]
+      const minor = rootversion[1]
+      if (major >= 22)
+        return 'Taproot'
+      if (major == 21 && minor >= 1)
+        return 'Taproot'
+      return 'Non-enforcing'
+    case 'btcwire':
+      const subagent = useragents[1].split(':')
+      const subbrand = subagent[0]
+      if (subbrand == 'btcd') {
+        const subversion = subagent[1].split('.')
+        if (subversion[0] == 0)
+          subversion.shift()
+        const submajor = subversion[0]
+        if (submajor >= 22)
+          return 'Taproot'
+        return 'Non-enforcing'
       }
-      if (cn == 'Bitcoin Core' && vercmp(v, [[22,0,0,0]]) == 0) {  // ST
-        flag('taproot', n);
-        continue;
-      }
-
-      if (vercmp(v, [[0,21,1,0]]) < 0) {
-        flag('none', n);
-        continue;
-      }
-    }
-    
-    flag('unknown', n);
-  }  
-  var result = {}
-  for (var [group, count] of Object.entries(piedata)) {
-    result[grplabel[group]] = count
+      break;
+    case 'Gocoin':
+      return 'Taproot'
+    case 'BitcoinUnlimited':
+    case 'therealbitcoin.org':
+      return 'Light'
   }
-  return result;
+  return 'Unknown'
 }
