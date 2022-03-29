@@ -175,8 +175,9 @@ function getKey(useragent) {
       if (parts[1]) {
         const sub = parse(parts[1])
         if (sub.product == 'btcd') {
-          if (sub.major >= 22)
-            return 'Taproot'
+          // btcd doesn't have a taproot version yet
+          // if (sub.major >= 22)
+          //   return 'Taproot'
           return 'Non-enforcing'
         }
       }
