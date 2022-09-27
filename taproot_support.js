@@ -184,8 +184,11 @@ function getKey(useragent) {
       break;
     case 'Gocoin':
       return 'Taproot'
+    case 'bcoin':
+      return 'Non-enforcing'
     case 'BitcoinUnlimited':
     case 'therealbitcoin.org':
+    case 'bitcoin-seeder':
       return 'Light'
   }
   return 'Unknown'
