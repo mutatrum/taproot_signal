@@ -21,8 +21,8 @@ const fs = require('fs');
   const networkInfo = await bitcoin_rpc.getNetworkInfo()
   logger.log(`connected to Bitcoin Core ${networkInfo.subversion} on ${config.bitcoind.host}:${config.bitcoind.zmqport}`)
 
-  // onSchedule()
-  cron.schedule('0 0 * * *', () => onSchedule());
+  onSchedule()
+  // cron.schedule('0 0 * * *', () => onSchedule());
 })()
 
 const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisig', 'witness_v0_keyhash', 'witness_v0_scripthash', 'witness_v1_taproot', 'witness_unknown', 'nulldata', 'nonstandard']
@@ -98,15 +98,18 @@ async function onSchedule() {
   const taproot_in = ins['witness_v1_taproot'];
   const taproot_out = outs['witness_v1_taproot'];
   var text1 = 
-  `Transactions from block ${firstBlock} to ${lastBlock}
+  `Taproot value from block ${firstBlock} to ${lastBlock}:
 
-Total value: ${formatAmount(amount)}
-Traproot value: ${formatAmount(taproot_in.amount)} (${taproot_in.amount_percentage.toFixed(1)}%)`
+${formatAmount(taproot_in.amount)} (${taproot_in.amount_percentage.toFixed(1)}%)
 
-  var media1 = await twitter.postMediaUpload(twitter, buffer1)
-  var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
+Total: ${formatAmount(amount)}`
 
-  logger.log(`Tweet ${tweet1.id}`)
+  logger.log(text1)
+
+  // var media1 = await twitter.postMediaUpload(twitter, buffer1)
+  // var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
+
+  // logger.log(`Tweet ${tweet1.id}`)
 
   var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
   var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0); 
@@ -114,16 +117,21 @@ Traproot value: ${formatAmount(taproot_in.amount)} (${taproot_in.amount_percenta
   var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date, formatCount)
 
   var text2 = 
-  `Total UTXOs: ${formatCount(in_count)} in, ${formatCount(out_count)} out
-Taproot UTXOs: ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)`
+  `Taproot UTXOs from block ${firstBlock} to ${lastBlock}:
+  
+${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
 
-  var media2 = await twitter.postMediaUpload(twitter, buffer2);
-  var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id)
+Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
 
-  logger.log(`Tweet ${tweet2.id}`)
+  logger.log(text2)
 
-  // fs.writeFileSync('image.png', buffer1)
-  // fs.writeFileSync('image2.png', buffer2)
+  // var media2 = await twitter.postMediaUpload(twitter, buffer2);
+  // var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id)
+
+  // logger.log(`Tweet ${tweet2.id}`)
+
+  fs.writeFileSync('image.png', buffer1)
+  fs.writeFileSync('image2.png', buffer2)
 }
 
 function createImage(ins, outs, key, header, caption, date, formatValue) {
