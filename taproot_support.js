@@ -46,9 +46,10 @@ async function onSchedule() {
 
   var buffer = createImage(piedata, total)
 
+  var mediaUpload = await twitter.postMediaUpload(buffer)
   // fs.writeFileSync('image.png', buffer)
 
-  await twitter.postStatus(text, buffer);
+  await twitter.postStatus(text, mediaUpload.media_id_string);
 
   logger.log('finished')
 }

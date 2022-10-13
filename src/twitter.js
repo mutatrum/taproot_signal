@@ -5,7 +5,7 @@ const Twitter = require('twitter');
 module.exports = function(config) {
   const twitter = new Twitter(config);
 
-  this.postStatus = async function(text, imageData, in_reply_to) {
+  this.postStatus = async function(text, media_id_string, in_reply_to) {
     logger.log(`Tweet:\n${text}`)
 
     if (in_reply_to) {
@@ -26,9 +26,9 @@ module.exports = function(config) {
       status: text
     }
 
-    if (imageData) {
-      var media = await postMediaUpload(twitter, imageData);
-      status.media_ids = media.media_id_string
+    if (media_id_string) {
+      // var media = await postMediaUpload(twitter, imageData);
+      status.media_ids = media_id_string
     }
     
     if (in_reply_to) {
@@ -56,7 +56,7 @@ module.exports = function(config) {
     });
   }
   
-  function postMediaUpload(twitter, imageData) {
+  this.postMediaUpload = async function(imageData) {
     return new Promise(function(resolve, reject) {
       twitter.post("media/upload", {media: imageData}, function(error, media, response) {
         if (error) {
