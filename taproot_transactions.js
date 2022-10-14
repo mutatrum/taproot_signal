@@ -28,17 +28,20 @@ const fs = require('fs');
 const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisig', 'witness_v0_keyhash', 'witness_v0_scripthash', 'witness_v1_taproot', 'witness_unknown', 'nulldata', 'nonstandard']
 
 async function onSchedule() {
-  var time = Math.floor(new Date().getTime() / 1000) - (24 * 60 * 60) // 8 hours
-  
+
+  logger.log('start')
+
+  var time = Math.floor(new Date().getTime() / 1000) - (24 * 60 * 60)
+
   var blockHash = await bitcoin_rpc.getBestBlockHash()
   var block = await bitcoin_rpc.getBlock(blockHash, 3)
 
   var ins = {}
   var outs = {'coinbase': {count: 0, amount:0}, 'fee': {count:0, amount: 0}}
   var fee = 0
-  
+
   var lastBlock = block.height;
-  
+
   while(time < block.time) {
 
     var txids = new Set()
@@ -49,7 +52,7 @@ async function onSchedule() {
 
       txids.add(tx.txid)
 
-      fee += tx.fee 
+      fee += tx.fee
 
       for (var vout of tx.vout) {
         var type = vout.scriptPubKey.type
@@ -90,14 +93,14 @@ async function onSchedule() {
 
   var date = formatDate(new Date(block.mediantime * 1000))
   var caption = `Block ${firstBlock} to ${lastBlock}`
-  
+
   var amount = Object.values(ins).reduce((acc, entry) => acc + entry['amount'], 0);
   var amountHeader = `Total: ${formatAmount(amount)}`
   var buffer1 = createImage(ins, outs, 'amount', amountHeader, caption, date, formatAmount)
-  
+
   const taproot_in = ins['witness_v1_taproot'];
   const taproot_out = outs['witness_v1_taproot'];
-  var text1 = 
+  var text1 =
   `Taproot value from block ${firstBlock} to ${lastBlock}:
 
 ${formatAmount(taproot_in.amount)} (${taproot_in.amount_percentage.toFixed(1)}%)
@@ -112,13 +115,13 @@ Total: ${formatAmount(amount)}`
   logger.log(`Tweet ${tweet1.id}`)
 
   var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
-  var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0); 
+  var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0);
   var countHeader = `UTXOs: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
   var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date, formatCount)
 
-  var text2 = 
+  var text2 =
   `Taproot UTXOs from block ${firstBlock} to ${lastBlock}:
-  
+
 ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
 
 Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
@@ -132,6 +135,8 @@ Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
 
   // fs.writeFileSync('image.png', buffer1)
   // fs.writeFileSync('image2.png', buffer2)
+
+  logger.log('finished')
 }
 
 function createImage(ins, outs, key, header, caption, date, formatValue) {
@@ -165,7 +170,7 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
   ctx.font = `18px DejaVu Sans Mono`
   ctx.textAlign = 'center'
   ctx.fillText(header, cx, 30)
-  
+
   ctx.font = `12px DejaVu Sans Mono`
   ctx.fillText(date, cx, 50)
   ctx.fillText(caption, cx, 580)
@@ -189,10 +194,10 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
         var percentage = value / intotal * 100
 
         ins[type][`${key}_percentage`] = percentage
-      
+
         y1 += percentage
         y2 += percentage
-    
+
         ctx.lineWidth = (percentage * height / 100) + 0.25
         ctx.strokeStyle = gradient
         ctx.beginPath()
@@ -208,11 +213,11 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
         ctx.lineTo(x1, y1 + percentage)
         ctx.fill()
         ctx.fillStyle = 'black'
-    
+
         ctx.textAlign = 'right'
         ctx.fillText(type, x1 - 9, y1 - 9)
         ctx.fillText(`${formatValue(value)}  ${percentage.toFixed(1)}%`, x1 - 9, y1 + 9)
-    
+
         y1 += percentage + gap1
         y2 += percentage + gap2
       }
@@ -237,17 +242,17 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
         var percentage = value / outtotal * 100
 
         outs[type][`${key}_percentage`] = percentage
- 
+
         y1 += percentage
         y2 += percentage
-  
+
         ctx.lineWidth = Math.max(percentage * 2, 0.25)
         ctx.strokeStyle = gradient
         ctx.beginPath()
         ctx.moveTo(x1, y1)
         ctx.bezierCurveTo(x1 + (width / 2), y1, x2 - (width / 2), y2, x2, y2)
         ctx.stroke()
-  
+
         ctx.fillStyle = 'white'
         ctx.lineWidth = 1
         ctx.beginPath()
@@ -262,7 +267,7 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
         ctx.textAlign = 'left'
         ctx.fillText(type, x2 + 9, y2 - 9)
         ctx.fillText(`${percentage.toFixed(1)}%  ${formatValue(value)}`, x2 + 9, y2 + 9)
-  
+
         y1 += percentage
         y2 += percentage + gap
       }
