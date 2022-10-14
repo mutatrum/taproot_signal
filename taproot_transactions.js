@@ -29,114 +29,111 @@ const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisi
 
 async function onSchedule() {
 
-  logger.log('start')
+  try {
+    logger.log('start')
 
-  var time = Math.floor(new Date().getTime() / 1000) - (24 * 60 * 60)
+    var time = Math.floor(new Date().getTime() / 1000) - (24 * 60 * 60)
 
-  var blockHash = await bitcoin_rpc.getBestBlockHash()
-  var block = await bitcoin_rpc.getBlock(blockHash, 3)
+    var blockHash = await bitcoin_rpc.getBestBlockHash()
+    var block = await bitcoin_rpc.getBlock(blockHash, 3)
 
-  var ins = {}
-  var outs = {'coinbase': {count: 0, amount:0}, 'fee': {count:0, amount: 0}}
-  var fee = 0
+    var ins = {}
+    var outs = {'coinbase': {count: 0, amount:0}, 'fee': {count:0, amount: 0}}
 
-  var lastBlock = block.height;
+    var lastBlock = block.height;
 
-  while(time < block.time) {
+    while(time < block.time) {
+      var fee = 0
 
-    var txids = new Set()
+      var txids = new Set()
 
-    logger.log(`Height ${block.height}`)
+      logger.log(`Height ${block.height}`)
 
-    for (var tx of block.tx.splice(1)) {
+      for (var tx of block.tx.splice(1)) {
 
-      txids.add(tx.txid)
+        txids.add(tx.txid)
 
-      fee += tx.fee
+        fee += tx.fee
 
-      for (var vout of tx.vout) {
-        var type = vout.scriptPubKey.type
-        if (typeof outs[type] === 'undefined') {
-          outs[type] = {count : 0, amount : 0}
+        for (var vout of tx.vout) {
+          var type = vout.scriptPubKey.type
+          if (typeof outs[type] === 'undefined') {
+            outs[type] = {count : 0, amount : 0}
+          }
+          outs[type].count += 1
+          outs[type].amount += vout.value
         }
-        outs[type].count += 1
-        outs[type].amount += vout.value
+
+        for (var vin of tx.vin) {
+          var prevout = vin.prevout
+          var type = prevout.scriptPubKey.type
+
+          if (typeof ins[type] === 'undefined') {
+            ins[type] = {count : 0, amount : 0}
+          }
+
+          ins[type].count += 1
+          if (txids.has(vin.txid)) {
+            // Transaction is spent in same block
+            outs[type].amount -= prevout.value
+          } else {
+            ins[type].amount += prevout.value
+          }
+        }
       }
 
-      for (var vin of tx.vin) {
-        var prevout = vin.prevout
-        var type = prevout.scriptPubKey.type
+      outs['coinbase'].amount += block.tx[0].vout[0].value - fee
+      outs['fee'].amount += fee
 
-        if (typeof ins[type] === 'undefined') {
-          ins[type] = {count : 0, amount : 0}
-        }
+      var firstBlock = block.height;
 
-        ins[type].count += 1
-        if (txids.has(vin.txid)) {
-          // Transaction is spent in same block
-          outs[type].amount -= prevout.value
-        } else {
-          ins[type].amount += prevout.value
-        }
-      }
+      blockHash = block.previousblockhash
+      block = await bitcoin_rpc.getBlock(blockHash, 3)
     }
 
-    var coinbase = block.tx[0]
-    outs['coinbase'].amount += coinbase.vout[0].value - fee
-    outs['fee'].amount += fee
+    var date = formatDate(new Date(block.mediantime * 1000))
+    var caption = `Block ${firstBlock} to ${lastBlock}`
 
-    var firstBlock = block.height;
+    var amount = Object.values(ins).reduce((acc, entry) => acc + entry['amount'], 0);
+    var amountHeader = `Total: ${formatAmount(amount)}`
+    var buffer1 = createImage(ins, outs, 'amount', amountHeader, caption, date, formatAmount)
 
-    blockHash = block.previousblockhash
-    block = await bitcoin_rpc.getBlock(blockHash, 3)
-  }
-
-  var date = formatDate(new Date(block.mediantime * 1000))
-  var caption = `Block ${firstBlock} to ${lastBlock}`
-
-  var amount = Object.values(ins).reduce((acc, entry) => acc + entry['amount'], 0);
-  var amountHeader = `Total: ${formatAmount(amount)}`
-  var buffer1 = createImage(ins, outs, 'amount', amountHeader, caption, date, formatAmount)
-
-  const taproot_in = ins['witness_v1_taproot'];
-  const taproot_out = outs['witness_v1_taproot'];
-  var text1 =
-  `Taproot value from block ${firstBlock} to ${lastBlock}:
+    const taproot_in = ins['witness_v1_taproot'];
+    const taproot_out = outs['witness_v1_taproot'];
+    var text1 =
+    `Taproot value from block ${firstBlock} to ${lastBlock}:
 
 ${formatAmount(taproot_in.amount)} (${taproot_in.amount_percentage.toFixed(1)}%)
 
 Total: ${formatAmount(amount)}`
 
-  logger.log(text1)
+    var media1 = await twitter.postMediaUpload(buffer1)
+    var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
 
-  var media1 = await twitter.postMediaUpload(twitter, buffer1)
-  var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
+    var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
+    var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0);
+    var countHeader = `UTXOs: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
+    var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date, formatCount)
 
-  logger.log(`Tweet ${tweet1.id}`)
-
-  var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
-  var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0);
-  var countHeader = `UTXOs: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
-  var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date, formatCount)
-
-  var text2 =
-  `Taproot UTXOs from block ${firstBlock} to ${lastBlock}:
+    var text2 =
+    `Taproot UTXOs from block ${firstBlock} to ${lastBlock}:
 
 ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
 
 Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
 
-  logger.log(text2)
+    var media2 = await twitter.postMediaUpload(buffer2);
+    var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id_str)
 
-  var media2 = await twitter.postMediaUpload(twitter, buffer2);
-  var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id)
+    // fs.writeFileSync('image.png', buffer1)
+    // fs.writeFileSync('image2.png', buffer2)
 
-  logger.log(`Tweet ${tweet2.id}`)
+    logger.log('finished')
 
-  // fs.writeFileSync('image.png', buffer1)
-  // fs.writeFileSync('image2.png', buffer2)
-
-  logger.log('finished')
+  }
+  catch (e) {
+    logger.log(JSON.stringify(e))
+  }
 }
 
 function createImage(ins, outs, key, header, caption, date, formatValue) {

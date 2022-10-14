@@ -40,7 +40,7 @@ module.exports = function(config) {
    
     logger.log(`tweet id ${tweet.id}`);
   
-    logger.log('done');
+    return tweet
   }
   
   function getStatusesShow(twitter, id) {
