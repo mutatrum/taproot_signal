@@ -134,7 +134,7 @@ Total: ${valueFormatter(value)}`
     var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date)
 
     var text2 =
-    `UTXOs in the last 24h (b)lock ${firstBlock} to ${lastBlock}):
+    `UTXOs in the last 24h (block ${firstBlock} to ${lastBlock}):
 
 Taproot: ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
 Total: ${in_count} in, ${out_count} out`
