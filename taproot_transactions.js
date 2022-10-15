@@ -15,30 +15,34 @@ const { createCanvas } = require('canvas');
 const fs = require('fs');
 
 (async function () {
+  var test = process.argv.splice(2).indexOf('test') != -1
 
   logger.log('init')
 
   const networkInfo = await bitcoin_rpc.getNetworkInfo()
   logger.log(`connected to Bitcoin Core ${networkInfo.subversion} on ${config.bitcoind.host}:${config.bitcoind.zmqport}`)
 
-  // onSchedule()
-  cron.schedule('0 0 * * *', () => onSchedule());
+  if (test) {
+    onSchedule(test)
+  } else {
+    cron.schedule('0 0 * * *', () => onSchedule(false));
+  }
 })()
 
 const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisig', 'witness_v0_keyhash', 'witness_v0_scripthash', 'witness_v1_taproot', 'witness_unknown', 'nulldata', 'nonstandard']
 
-async function onSchedule() {
+async function onSchedule(test) {
 
   try {
     logger.log('start')
 
-    var time = Math.floor(new Date().getTime() / 1000) - (24 * 60 * 60)
+    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 1 : 24) * 60 * 60)
 
     var blockHash = await bitcoin_rpc.getBestBlockHash()
     var block = await bitcoin_rpc.getBlock(blockHash, 3)
 
     var ins = {}
-    var outs = {'coinbase': {count: 0, amount:0}, 'fee': {count:0, amount: 0}}
+    var outs = {'coinbase': {count: 0, value: 0}, 'fee': {count:0, value: 0}}
 
     var lastBlock = block.height;
 
@@ -47,7 +51,7 @@ async function onSchedule() {
 
       var txids = new Set()
 
-      logger.log(`Height ${block.height}`)
+      // logger.log(`Height ${block.height}`)
 
       for (var tx of block.tx.splice(1)) {
 
@@ -57,33 +61,38 @@ async function onSchedule() {
 
         for (var vout of tx.vout) {
           var type = vout.scriptPubKey.type
+
+          if (types.indexOf(type) === -1) types.push(type)
+
           if (typeof outs[type] === 'undefined') {
-            outs[type] = {count : 0, amount : 0}
+            outs[type] = {count : 0, value : 0}
           }
           outs[type].count += 1
-          outs[type].amount += vout.value
+          outs[type].value += vout.value
         }
 
         for (var vin of tx.vin) {
           var prevout = vin.prevout
           var type = prevout.scriptPubKey.type
 
+          if (types.indexOf(type) === -1) types.push(type)
+
           if (typeof ins[type] === 'undefined') {
-            ins[type] = {count : 0, amount : 0}
+            ins[type] = {count : 0, value : 0}
           }
 
           ins[type].count += 1
           if (txids.has(vin.txid)) {
             // Transaction is spent in same block
-            outs[type].amount -= prevout.value
+            outs[type].value -= prevout.value
           } else {
-            ins[type].amount += prevout.value
+            ins[type].value += prevout.value
           }
         }
       }
 
-      outs['coinbase'].amount += block.tx[0].vout[0].value - fee
-      outs['fee'].amount += fee
+      outs['coinbase'].value += block.tx[0].vout[0].value - fee
+      outs['fee'].value += fee
 
       var firstBlock = block.height;
 
@@ -91,42 +100,52 @@ async function onSchedule() {
       block = await bitcoin_rpc.getBlock(blockHash, 3)
     }
 
+    Object.values(ins).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
+    Object.values(outs).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
+
+    logger.log(JSON.stringify({in: ins, out: outs}))
+
     var date = formatDate(new Date(block.mediantime * 1000))
     var caption = `Block ${firstBlock} to ${lastBlock}`
 
-    var amount = Object.values(ins).reduce((acc, entry) => acc + entry['amount'], 0);
-    var amountHeader = `Total: ${formatAmount(amount)}`
-    var buffer1 = createImage(ins, outs, 'amount', amountHeader, caption, date, formatAmount)
+    var value = Object.values(ins).reduce((acc, entry) => acc + entry['value'], 0);
+    var valueHeader = `Total: ${valueFormatter(value)}`
+    var buffer1 = createImage(ins, outs, 'value', valueHeader, caption, date, valueFormatter)
 
     const taproot_in = ins['witness_v1_taproot'];
     const taproot_out = outs['witness_v1_taproot'];
     var text1 =
-    `Taproot value from block ${firstBlock} to ${lastBlock}:
+    `Value transacted in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-${formatAmount(taproot_in.amount)} (${taproot_in.amount_percentage.toFixed(1)}%)
+Taproot: ${valueFormatter(taproot_in.value)} (${taproot_in.value_percentage.toFixed(1)}%)
+Total: ${valueFormatter(value)}`
 
-Total: ${formatAmount(amount)}`
-
-    var media1 = await twitter.postMediaUpload(buffer1)
-    var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
+    if (!test) {
+      var media1 = await twitter.postMediaUpload(buffer1)
+      var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
+    } else {
+      logger.log(`Tweet: \n${text1}`)
+      fs.writeFileSync('image.png', buffer1)
+    }
 
     var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
     var out_count = Object.values(outs).reduce((acc, entry) => acc + entry['count'], 0);
-    var countHeader = `UTXOs: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
-    var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date, formatCount)
+    var countHeader = `UTXOs: ${in_count} in, ${out_count} out`
+    var buffer2 = createImage(ins, outs, 'count', countHeader, caption, date)
 
     var text2 =
-    `Taproot UTXOs from block ${firstBlock} to ${lastBlock}:
+    `UTXOs in the last 24h (b)lock ${firstBlock} to ${lastBlock}):
 
-${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
+Taproot: ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
+Total: ${in_count} in, ${out_count} out`
 
-Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
-
-    var media2 = await twitter.postMediaUpload(buffer2);
-    var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id_str)
-
-    // fs.writeFileSync('image.png', buffer1)
-    // fs.writeFileSync('image2.png', buffer2)
+    if (!test) {
+      var media2 = await twitter.postMediaUpload(buffer2);
+      var tweet2 = await twitter.postStatus(text2, media2.media_id_string, tweet1.id_str)
+    } else {
+      logger.log(`Tweet: \n${text2}`)
+      fs.writeFileSync('image2.png', buffer2)
+    }
 
     logger.log('finished')
 
@@ -136,7 +155,8 @@ Total: ${formatCount(in_count)} in, ${formatCount(out_count)} out`
   }
 }
 
-function createImage(ins, outs, key, header, caption, date, formatValue) {
+function createImage(ins, outs, key, header, caption, date, formatter) {
+  if (typeof formatter === 'undefined') formatter = value => value
   const canvas = createCanvas(1200, 600)
   const ctx = canvas.getContext('2d')
 
@@ -157,9 +177,11 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
   ctx.textBaseline = 'middle'
 
   const gradient = ctx.createLinearGradient(cx - width, 0, cx + width, 0);
-  gradient.addColorStop(0, '#1c77d0');
-  gradient.addColorStop(0.5, 'black');
-  gradient.addColorStop(1, '#ee7a21');
+  gradient.addColorStop(0.00, '#40a2f3')
+  gradient.addColorStop(0.20, '#1c77d0')
+  gradient.addColorStop(0.50, 'black')
+  gradient.addColorStop(0.80, '#ee7a21')
+  gradient.addColorStop(1.00, '#fa9f1e')
 
   var intotal = Object.values(ins).reduce((acc, entry) => acc + entry[key], 0);
   var outtotal = Object.values(outs).reduce((acc, entry) => acc + entry[key], 0);
@@ -213,7 +235,7 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
 
         ctx.textAlign = 'right'
         ctx.fillText(type, x1 - 9, y1 - 9)
-        ctx.fillText(`${formatValue(value)}  ${percentage.toFixed(1)}%`, x1 - 9, y1 + 9)
+        ctx.fillText(`${formatter(value)}  ${percentage.toFixed(1)}%`, x1 - 9, y1 + 9)
 
         y1 += percentage + gap1
         y2 += percentage + gap2
@@ -263,7 +285,7 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
 
         ctx.textAlign = 'left'
         ctx.fillText(type, x2 + 9, y2 - 9)
-        ctx.fillText(`${percentage.toFixed(1)}%  ${formatValue(value)}`, x2 + 9, y2 + 9)
+        ctx.fillText(`${percentage.toFixed(1)}%  ${formatter(value)}`, x2 + 9, y2 + 9)
 
         y1 += percentage
         y2 += percentage + gap
@@ -274,11 +296,7 @@ function createImage(ins, outs, key, header, caption, date, formatValue) {
   return canvas.toBuffer();
 }
 
-function formatCount(value) {
-  return value
-}
-
-function formatAmount(value) {
+function valueFormatter(value) {
   if (value < 0.000001) return `${(value * 1e8).toFixed(0)} sats`
   if (value < 0.001) return `${(value * 1e5).toFixed(1)}k sats`
   if (value < 1) return `${(value * 1e2).toFixed(1)}k sats`
