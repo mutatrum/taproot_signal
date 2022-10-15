@@ -117,7 +117,7 @@ async function onSchedule(test) {
     var text1 =
     `Value transacted in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-Taproot: ${valueFormatter(taproot_in.value)} (${taproot_in.value_percentage.toFixed(1)}%)
+Taproot: ${valueFormatter(taproot_in.value)} in (${taproot_in.value_percentage.toFixed(1)}%), ${valueFormatter(taproot_out.value)} out (${taproot_out.value_percentage.toFixed(1)}%)
 Total: ${valueFormatter(value)}`
 
     if (!test) {
