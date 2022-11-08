@@ -51,7 +51,9 @@ async function onSchedule(test) {
 
       var txids = new Set()
 
-      // logger.log(`Height ${block.height}`)
+      if (test) {
+        logger.log(`Height ${block.height}`)
+      }
 
       for (var tx of block.tx.splice(1)) {
 
@@ -103,7 +105,7 @@ async function onSchedule(test) {
     Object.values(ins).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
     Object.values(outs).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
 
-    logger.log(JSON.stringify({in: ins, out: outs}))
+    logger.log(JSON.stringify({time: time, firstBlock: firstBlock, lastBlock: lastBlock, in: ins, out: outs}))
 
     var date = formatDate(new Date(block.mediantime * 1000))
     var caption = `Block ${firstBlock} to ${lastBlock}`
@@ -117,7 +119,7 @@ async function onSchedule(test) {
     var text1 =
     `Value transacted in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-Taproot: ${valueFormatter(taproot_in.value)} in (${taproot_in.value_percentage.toFixed(1)}%), ${valueFormatter(taproot_out.value)} out (${taproot_out.value_percentage.toFixed(1)}%)
+Taproot: ${valueFormatter(taproot_in.value)} in (${formatPercentage(taproot_in.value_percentage)}%), ${valueFormatter(taproot_out.value)} out (${formatPercentage(taproot_out.value_percentage)}%)
 Total: ${valueFormatter(value)}`
 
     if (!test) {
@@ -125,7 +127,7 @@ Total: ${valueFormatter(value)}`
       var tweet1 = await twitter.postStatus(text1, media1.media_id_string)
     } else {
       logger.log(`Tweet: \n${text1}`)
-      fs.writeFileSync('image.png', buffer1)
+      fs.writeFileSync('image1.png', buffer1)
     }
 
     var in_count = Object.values(ins).reduce((acc, entry) => acc + entry['count'], 0);
@@ -136,7 +138,7 @@ Total: ${valueFormatter(value)}`
     var text2 =
     `UTXOs in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-Taproot: ${taproot_in.count} in (${taproot_in.count_percentage.toFixed(1)}%), ${taproot_out.count} out (${taproot_out.count_percentage.toFixed(1)}%)
+Taproot: ${taproot_in.count} in (${formatPercentage(taproot_in.count_percentage)}%), ${taproot_out.count} out (${formatPercentage(taproot_out.count_percentage)}%)
 Total: ${in_count} in, ${out_count} out`
 
     if (!test) {
@@ -235,7 +237,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
 
         ctx.textAlign = 'right'
         ctx.fillText(type, x1 - 9, y1 - 9)
-        ctx.fillText(`${formatter(value)}  ${percentage.toFixed(1)}%`, x1 - 9, y1 + 9)
+        ctx.fillText(`${formatter(value)}  ${formatPercentage(percentage)}%`, x1 - 9, y1 + 9)
 
         y1 += percentage + gap1
         y2 += percentage + gap2
@@ -285,7 +287,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
 
         ctx.textAlign = 'left'
         ctx.fillText(type, x2 + 9, y2 - 9)
-        ctx.fillText(`${percentage.toFixed(1)}%  ${formatter(value)}`, x2 + 9, y2 + 9)
+        ctx.fillText(`${formatPercentage(percentage)}%  ${formatter(value)}`, x2 + 9, y2 + 9)
 
         y1 += percentage
         y2 += percentage + gap
@@ -307,6 +309,12 @@ function valueFormatter(value) {
 
 function formatDate(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+function formatPercentage(percentage) {
+  const zeros = Math.floor(-Math.log10(percentage))
+  const digits = Math.max(1, zeros + 1)
+  return percentage.toFixed(digits)
 }
 
 function pad(string) {
