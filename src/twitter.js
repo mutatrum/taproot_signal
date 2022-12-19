@@ -47,6 +47,7 @@ module.exports = function(config) {
     return new Promise(function(resolve, reject) {
       twitter.get("statuses/show/" + id, {}, function(error, media, response) {
         if (error) {
+          logger.log(`ERROR: ${error}`)
           reject(error);
         } else {
           logger.log(`GET statuses/show: ${response.statusCode} ${response.statusMessage}`);
@@ -60,6 +61,7 @@ module.exports = function(config) {
     return new Promise(function(resolve, reject) {
       twitter.post("media/upload", {media: imageData}, function(error, media, response) {
         if (error) {
+          logger.log(`ERROR: ${error}`)
           reject(error);
         } else {
           logger.log(`POST media/upload: ${response.statusCode} ${response.statusMessage}`);
@@ -73,6 +75,7 @@ module.exports = function(config) {
     return new Promise(function(resolve, reject) {
       twitter.post("statuses/update", status, function(error, tweet, response) {
         if (error) {
+          logger.log(`ERROR: ${error}`)
           reject(error);
         } else {
           logger.log(`POST statuses/update: ${response.statusCode} ${response.statusMessage}`);
