@@ -32,12 +32,6 @@ async function onSchedule() {
   var percentage = piedata['Taproot'] / total * 100;
 
   var text = `Bitcoin Node Taproot Support: ${percentage.toFixed(2)}%\n`;
-  for (var i = 1; i <= percentage; i++) {
-    text += '🟧'
-    if (i % 10 == 0) {
-      text += '\n'
-    }
-  }
   text += '\n\nNode count:'
   
   for (var [name, count] of Object.entries(piedata)) {
