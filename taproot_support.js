@@ -16,7 +16,7 @@ const { createCanvas } = require('canvas');
   logger.log('init')
 
   // onSchedule()
-  cron.schedule('0 */8 * * *', () => onSchedule());
+  cron.schedule('0 6-23/12 * * *', () => onSchedule());
 })()
 
 async function onSchedule() {
