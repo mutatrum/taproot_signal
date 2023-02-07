@@ -77,6 +77,9 @@ async function onSchedule(test) {
           outs[type].value += vout.value
         }
 
+        let inscriptionCount = 0
+        let content_type = null
+
         for (var vin of tx.vin) {
           var prevout = vin.prevout
           var type = prevout.scriptPubKey.type
@@ -95,23 +98,26 @@ async function onSchedule(test) {
             ins[type].value += prevout.value
           }
 
-          if (prevout.scriptPubKey.type === 'witness_v1_taproot' && vin.txinwitness) {
+          if (prevout.scriptPubKey.type === 'witness_v1_taproot') {
             for (var txinwitness of vin.txinwitness) {
               if(txinwitness.match(inscription)) {
+                inscriptionCount++
                 let length = parseInt(txinwitness.substring(84, 86), 16)
-                let content_type = Buffer.from(txinwitness.substring(86, 86 + (length * 2)), "hex").toString("utf-8").split(';')[0].split('+')[0].split('/')[1]
-                let ordinal = ordinals.get(content_type)
-                if (!ordinal) {
-                  ordinal = {count: 0, size: 0}
-                  ordinals.set(content_type, ordinal)
-                }
-                ordinal.count++
-                ordinal.size += (txinwitness.length / 2)
+                content_type = Buffer.from(txinwitness.substring(86, 86 + (length * 2)), "hex").toString("utf-8").split(';')[0].split('+')[0].split('/')[1]
               }
             }
           }
         }
 
+        if (inscriptionCount === 1) {
+          let ordinal = ordinals.get(content_type)
+          if (!ordinal) {
+            ordinal = {count: 0, size: 0}
+            ordinals.set(content_type, ordinal)
+          }
+          ordinal.count++
+          ordinal.size += (tx.hex.length / 2)
+        }
       }
 
       outs['coinbase'].value += block.tx[0].vout[0].value - fee
@@ -142,7 +148,7 @@ async function onSchedule(test) {
     var text1 =
     `Value transacted in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-Taproot: ${valueFormatter(taproot_in.value)} in (${formatPercentage(taproot_in.value_percentage)}%), ${valueFormatter(taproot_out.value)} out (${formatPercentage(taproot_out.value_percentage)}%)
+Taproot: ${valueFormatter(taproot_in.value)} in (${formatPercentage(taproot_in.value_percentage)}), ${valueFormatter(taproot_out.value)} out (${formatPercentage(taproot_out.value_percentage)})
 Total: ${valueFormatter(value)}`
 
     if (!test) {
@@ -161,7 +167,7 @@ Total: ${valueFormatter(value)}`
     var text2 =
     `UTXOs in the last 24h (block ${firstBlock} to ${lastBlock}):
 
-Taproot: ${taproot_in.count} in (${formatPercentage(taproot_in.count_percentage)}%), ${taproot_out.count} out (${formatPercentage(taproot_out.count_percentage)}%)
+Taproot: ${taproot_in.count} in (${formatPercentage(taproot_in.count_percentage)}), ${taproot_out.count} out (${formatPercentage(taproot_out.count_percentage)})
 Total: ${in_count} in, ${out_count} out`
 
     if (!test) {
@@ -172,8 +178,6 @@ Total: ${in_count} in, ${out_count} out`
       fs.writeFileSync('image2.png', buffer2)
     }
 
-
-
     let totalSize = 0
     let totalCount = 0
     ordinals.forEach(ordinal => {totalSize += ordinal.size; totalCount += ordinal.count})
@@ -182,12 +186,15 @@ Total: ${in_count} in, ${out_count} out`
 
     var text3 = `Ordinals:
 
-Total: ${totalCount}, ${Math.round(totalSize / 1024)}kb (${Math.round(totalSize * 100 / totalWeight)}%)
+Total: ${totalCount}, ${formatSize(totalSize)} (${formatPercentage(totalSize * 100 / totalWeight)})
 `
-    sortedOrdinals.forEach((ordinal, content_type) => {
-      text3 += `
-${content_type.toUpperCase()}: ${ordinal.count}, ${Math.round(ordinal.size / 1024)}kb (${Math.round(ordinal.size * 100 / totalWeight)}%)`
-    })
+
+    for (var [content_type, ordinal] of sortedOrdinals) {
+      let line = `
+${content_type.toUpperCase()}: ${ordinal.count}, ${formatSize(ordinal.size)} (${formatPercentage(ordinal.size * 100 / totalWeight)})`
+      if (line.length + text3.length > 280) break
+      text3 += line
+    }
 
     if (!test) {
       var tweet3 = await twitter.postStatus(text3, null, tweet2.id_str)
@@ -283,7 +290,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
 
         ctx.textAlign = 'right'
         ctx.fillText(type, x1 - 9, y1 - 9)
-        ctx.fillText(`${formatter(value)}  ${formatPercentage(percentage)}%`, x1 - 9, y1 + 9)
+        ctx.fillText(`${formatter(value)}  ${formatPercentage(percentage)}`, x1 - 9, y1 + 9)
 
         y1 += percentage + gap1
         y2 += percentage + gap2
@@ -333,7 +340,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
 
         ctx.textAlign = 'left'
         ctx.fillText(type, x2 + 9, y2 - 9)
-        ctx.fillText(`${formatPercentage(percentage)}%  ${formatter(value)}`, x2 + 9, y2 + 9)
+        ctx.fillText(`${formatPercentage(percentage)}  ${formatter(value)}`, x2 + 9, y2 + 9)
 
         y1 += percentage
         y2 += percentage + gap
@@ -360,7 +367,13 @@ function formatDate(date) {
 function formatPercentage(percentage) {
   const zeros = Math.floor(-Math.log10(percentage))
   const digits = Math.max(1, zeros + 1)
-  return percentage.toFixed(digits)
+  return `${percentage.toFixed(digits)}%`
+}
+
+function formatSize(size) {
+  if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`
+  if (size > 1024) return `${(size / 1024).toFixed(1)} kB`
+  return `${size} b`
 }
 
 function pad(string) {
