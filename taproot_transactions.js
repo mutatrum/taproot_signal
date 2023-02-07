@@ -33,6 +33,8 @@ const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisi
 
 async function onSchedule(test) {
 
+  let inscription = /^20[a-f0-9]{64}ac0063036f72640101/
+
   try {
     logger.log('start')
 
@@ -43,6 +45,8 @@ async function onSchedule(test) {
 
     var ins = {}
     var outs = {'coinbase': {count: 0, value: 0}, 'fee': {count:0, value: 0}}
+    let ordinals = new Map()
+    let totalWeight = 0
 
     var lastBlock = block.height;
 
@@ -90,11 +94,30 @@ async function onSchedule(test) {
           } else {
             ins[type].value += prevout.value
           }
+
+          if (prevout.scriptPubKey.type === 'witness_v1_taproot' && vin.txinwitness) {
+            for (var txinwitness of vin.txinwitness) {
+              if(txinwitness.match(inscription)) {
+                let length = parseInt(txinwitness.substring(84, 86), 16)
+                let content_type = Buffer.from(txinwitness.substring(86, 86 + (length * 2)), "hex").toString("utf-8").split(';')[0].split('+')[0].split('/')[1]
+                let ordinal = ordinals.get(content_type)
+                if (!ordinal) {
+                  ordinal = {count: 0, size: 0}
+                  ordinals.set(content_type, ordinal)
+                }
+                ordinal.count++
+                ordinal.size += (txinwitness.length / 2)
+              }
+            }
+          }
         }
+
       }
 
       outs['coinbase'].value += block.tx[0].vout[0].value - fee
       outs['fee'].value += fee
+
+      totalWeight += block.weight
 
       var firstBlock = block.height;
 
@@ -147,6 +170,29 @@ Total: ${in_count} in, ${out_count} out`
     } else {
       logger.log(`Tweet: \n${text2}`)
       fs.writeFileSync('image2.png', buffer2)
+    }
+
+
+
+    let totalSize = 0
+    let totalCount = 0
+    ordinals.forEach(ordinal => {totalSize += ordinal.size; totalCount += ordinal.count})
+
+    let sortedOrdinals = new Map([...ordinals.entries()].sort((a, b) => b[1].size - a[1].size));
+
+    var text3 = `Ordinals:
+
+Total: ${totalCount}, ${Math.round(totalSize / 1024)}kb (${Math.round(totalSize * 100 / totalWeight)}%)
+`
+    sortedOrdinals.forEach((ordinal, content_type) => {
+      text3 += `
+${content_type.toUpperCase()}: ${ordinal.count}, ${Math.round(ordinal.size / 1024)}kb (${Math.round(ordinal.size * 100 / totalWeight)}%)`
+    })
+
+    if (!test) {
+      var tweet3 = await twitter.postStatus(text3, null, tweet2.id_str)
+    } else {
+      logger.log(`Tweet: ${text3}`)
     }
 
     logger.log('finished')
