@@ -424,11 +424,6 @@ function createInscriptionImage(blockStats, header, caption, date, formatter) {
       let total = Math.round(stats.total / heightRatio)
 
       ctx.beginPath()
-      ctx.rect(Math.floor(x - blockWidth), y - totalHeight, Math.ceil(blockStep), totalHeight)
-      ctx.fillStyle = 'grey'
-      ctx.fill()
-
-      ctx.beginPath()
       ctx.rect(Math.floor(x - blockWidth), y - total, Math.ceil(blockStep), total)
       ctx.fillStyle = 'blue'
       ctx.fill()
