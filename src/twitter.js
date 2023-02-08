@@ -11,11 +11,15 @@ module.exports = function(config) {
     if (in_reply_to) {
       var reply = await getStatusesShow(twitter, in_reply_to);
       screen_name = reply.user.screen_name;
+      console.log(`screen_name: ${screen_name}`)
       var mentions = reply.text.match(/@[a-zA-Z0-9_]*/g);
+      console.log(`mentions: ${mentions}`)
       if (mentions != null) {
         for (var name of mentions) {
+          console.log(`${screen_name.indexOf(name)} == -1 && ${name} != ${config.screen_name}`)
           if (screen_name.indexOf(name) == -1 && name != config.screen_name) {
             screen_name = screen_name + ' ' + name;
+            console.log(`screen_name: ${screen_name}`)
           }
         }
       }
