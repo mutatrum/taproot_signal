@@ -207,11 +207,11 @@ Total: ${in_count} in, ${out_count} out`
 
 Total: ${totalCount}, ${formatSize(totalSize)} (${formatPercentage(totalSize * 100 / totalWeight)})
 `
-
+    let max_length = 280 - config.twitter.screen_name.length - 2
     for (var [content_type, ordinal] of sortedOrdinals) {
       let line = `
 ${content_type.toUpperCase()}: ${ordinal.count}, ${formatSize(ordinal.size)} (${formatPercentage(ordinal.size * 100 / totalWeight)})`
-      if (line.length + text3.length > 280) break
+      if (line.length + text3.length > max_length) break
       text3 += line
     }
 
