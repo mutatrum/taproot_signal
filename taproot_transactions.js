@@ -2,6 +2,7 @@
 
 const config = require('./config');
 const logger = require('./src/logger');
+const crypto = require("crypto");
 
 const BitcoinRpc = require('./src/bitcoin-rpc.js');
 const bitcoin_rpc =  new BitcoinRpc(config.bitcoind);
@@ -45,12 +46,17 @@ async function onSchedule(test) {
 
     var ins = {}
     var outs = {'coinbase': {count: 0, value: 0}, 'fee': {count:0, value: 0}}
-    let ordinals = new Map()
+    let ordinals = {}
+    let blockStats = {}
     let totalWeight = 0
 
     var lastBlock = block.height;
 
     while(time < block.time) {
+
+      let currentBlockOrdinal = {}
+      blockStats[block.height] = {total: block.weight, inscriptions: currentBlockOrdinal}
+
       var fee = 0
 
       var txids = new Set()
@@ -110,13 +116,21 @@ async function onSchedule(test) {
         }
 
         if (inscriptionCount === 1) {
-          let ordinal = ordinals.get(content_type)
+          let ordinal = ordinals[content_type]
           if (!ordinal) {
             ordinal = {count: 0, size: 0}
-            ordinals.set(content_type, ordinal)
+            ordinals[content_type] = ordinal
           }
           ordinal.count++
           ordinal.size += (tx.hex.length / 2)
+
+          let currentOrdinal = currentBlockOrdinal[content_type]
+          if (!currentOrdinal) {
+            currentOrdinal = {count: 0, size: 0}
+            currentBlockOrdinal[content_type] = currentOrdinal
+          }
+          currentOrdinal.count++
+          currentOrdinal.size += (tx.hex.length / 2)
         }
       }
 
@@ -124,6 +138,10 @@ async function onSchedule(test) {
       outs['fee'].value += fee
 
       totalWeight += block.weight
+
+      // if (test) {
+      //   console.log(JSON.stringify({height: block.height, weight: block.weight, inscriptions: Object.fromEntries(ordinals)}))
+      // }
 
       var firstBlock = block.height;
 
@@ -180,9 +198,10 @@ Total: ${in_count} in, ${out_count} out`
 
     let totalSize = 0
     let totalCount = 0
-    ordinals.forEach(ordinal => {totalSize += ordinal.size; totalCount += ordinal.count})
 
-    let sortedOrdinals = new Map([...ordinals.entries()].sort((a, b) => b[1].size - a[1].size));
+    Object.values(ordinals).forEach(ordinal => {totalSize += ordinal.size; totalCount += ordinal.count})
+    
+    let sortedOrdinals = Object.entries(ordinals).sort(([,a],[,b]) => b.size-a.size)
 
     var text3 = `Ordinals:
 
@@ -196,17 +215,23 @@ ${content_type.toUpperCase()}: ${ordinal.count}, ${formatSize(ordinal.size)} (${
       text3 += line
     }
 
+    var inscriptionsHeader = `Inscriptions: ${totalCount}, ${formatSize(totalSize)} (${formatPercentage(totalSize * 100 / totalWeight)})`
+
+    var buffer3 = createInscriptionImage(blockStats, inscriptionsHeader, caption, date)
+
     if (!test) {
-      var tweet3 = await twitter.postStatus(text3, null, tweet2.id_str)
+      var media3 = await twitter.postMediaUpload(buffer3);
+      var tweet3 = await twitter.postStatus(text3, media3.media_id_string, tweet2.id_str)
     } else {
       logger.log(`Tweet: ${text3}`)
+      fs.writeFileSync('image3.png', buffer3)
     }
 
     logger.log('finished')
 
   }
   catch (e) {
-    logger.log(JSON.stringify(e))
+    console.log(e)
   }
 }
 
@@ -349,6 +374,114 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
   }
 
   return canvas.toBuffer();
+}
+
+function createInscriptionImage(blockStats, header, caption, date, formatter) {
+  try {
+    if (typeof formatter === 'undefined') formatter = value => value
+    const canvas = createCanvas(1200, 600)
+    const ctx = canvas.getContext('2d')
+  
+    const cx = canvas.width / 2
+    const cy = canvas.height / 2
+    const width = 350
+    const height = 200
+    const gapsize = 300
+  
+    ctx.imageSmoothingEnabled = false
+  
+    ctx.beginPath()
+    ctx.rect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = 'white'
+    ctx.fill()
+  
+    ctx.fillStyle = 'black'
+    ctx.textBaseline = 'middle'
+  
+    ctx.font = `18px DejaVu Sans Mono`
+    ctx.textAlign = 'center'
+    ctx.fillText(header, cx, 30)
+  
+    ctx.font = `12px DejaVu Sans Mono`
+    ctx.fillText(date, cx, 50)
+    ctx.fillText(caption, cx, 580)
+  
+    let blockStep = 1100 / Object.keys(blockStats).length
+    let blockWidth = blockStep / 2
+  
+    let x = 50 + blockWidth
+
+    let totalHeight = 450
+
+    let heightRatio = Math.round(4_000_000 / totalHeight) // 4MB max block size, 500 pixels
+
+    let content_types = []
+  
+    for (let [block, stats] of Object.entries(blockStats)) {
+
+      let y = 70 + totalHeight
+
+      let total = Math.round(stats.total / heightRatio)
+
+      ctx.beginPath()
+      ctx.rect(Math.floor(x - blockWidth), y - totalHeight, Math.ceil(blockStep), totalHeight)
+      ctx.fillStyle = 'grey'
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.rect(Math.floor(x - blockWidth), y - total, Math.ceil(blockStep), total)
+      ctx.fillStyle = 'blue'
+      ctx.fill()
+      
+      for (let [content_type, ordinals] of Object.entries(stats.inscriptions)) {
+
+        if (!content_types.includes(content_type)) content_types.push(content_type)
+
+        let height = Math.round(ordinals.size / heightRatio)
+        y -= height
+
+        ctx.beginPath()
+        ctx.rect(Math.floor(x - blockWidth), y, Math.ceil(blockStep), height)
+        ctx.fillStyle = `#${createHash(content_type, 3)}`
+        ctx.fill()
+
+        // ctx.fillStyle = 'white'
+        // ctx.fillText(content_type, x, y + (height / 2))
+      }
+  
+      if (block % 10 == 0) {        
+        ctx.font = `12px DejaVu Sans Mono`
+        ctx.fillStyle = 'black'
+        ctx.fillText(block, x, totalHeight + 85)
+      }
+  
+      x += blockStep
+    }
+
+    ctx.textAlign = 'left'
+
+    x = 60
+    for (var content_type of content_types) {
+      ctx.beginPath()
+      ctx.rect(x, totalHeight + 100, 10, 10)
+      ctx.fillStyle = `#${createHash(content_type, 3)}`
+      ctx.fill()
+
+      ctx.fillStyle = 'black'
+      ctx.fillText(content_type, x + 15, totalHeight + 105)
+
+      x += ctx.measureText(content_type).width + 30
+    }
+  
+    return canvas.toBuffer();
+  }
+  catch (e) {
+    console.log(e)
+  }
+}
+
+function createHash(data, len) {
+  return crypto.createHash("shake256", { outputLength: len }).update(data).digest("hex");
 }
 
 function valueFormatter(value) {
