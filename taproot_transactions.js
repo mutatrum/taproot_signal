@@ -122,7 +122,7 @@ async function onSchedule(test) {
             ordinals[content_type] = ordinal
           }
           ordinal.count++
-          ordinal.size += (tx.hex.length / 2)
+          ordinal.size += tx.weight
 
           let currentOrdinal = currentBlockOrdinal[content_type]
           if (!currentOrdinal) {
@@ -130,7 +130,7 @@ async function onSchedule(test) {
             currentBlockOrdinal[content_type] = currentOrdinal
           }
           currentOrdinal.count++
-          currentOrdinal.size += (tx.hex.length / 2)
+          currentOrdinal.size += tx.weight
         }
       }
 
@@ -439,9 +439,6 @@ function createInscriptionImage(blockStats, header, caption, date, formatter) {
         ctx.rect(Math.floor(x - blockWidth), y, Math.ceil(blockStep), height)
         ctx.fillStyle = `#${createHash(content_type, 3)}`
         ctx.fill()
-
-        // ctx.fillStyle = 'white'
-        // ctx.fillText(content_type, x, y + (height / 2))
       }
   
       if (block % 10 == 0) {        
