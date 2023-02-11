@@ -30,13 +30,32 @@ const fs = require('fs');
   }
 })()
 
-const types = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisig', 'witness_v0_keyhash', 'witness_v0_scripthash', 'witness_v1_taproot', 'witness_unknown', 'nulldata', 'nonstandard']
+const TYPES = ['coinbase', 'fee', 'pubkey', 'pubkeyhash', 'scripthash', 'multisig', 'witness_v0_keyhash', 'witness_v0_scripthash', 
+               'witness_v1_taproot', 'witness_unknown', 'nulldata', 'nonstandard']
+
+const MPN65 = [/*'#ff0029',*/ '#377eb8', '#66a61e', '#984ea3', '#00d2d5', '#ff7f00', '#af8d00', '#7f80cd', '#b3e900', '#c42e60', 
+               '#a65628', '#f781bf', '#8dd3c7', '#bebada', '#fb8072', '#80b1d3', '#fdb462', '#fccde5', '#bc80bd', '#ffed6f', 
+               '#c4eaff', '#cf8c00', '#1b9e77', '#d95f02', '#e7298a', '#e6ab02', '#a6761d', '#0097ff', '#00d067', '#000000', 
+               '#252525', '#525252', '#737373', '#969696', '#bdbdbd', '#f43600', '#4ba93b', '#5779bb', '#927acc', '#97ee3f', 
+               '#bf3947', '#9f5b00', '#f48758', '#8caed6', '#f2b94f', '#eff26e', '#e43872', '#d9b100', '#9d7a00', '#698cff', 
+               '#d9d9d9', '#00d27e', '#d06800', '#009f82', '#c49200', '#cbe8ff', '#fecddf', '#c27eb6', '#8cd2ce', '#c4b8d9', 
+               '#f883b0', '#a49100', '#f48800', '#27d0df', '#a04a9b']
+
+let INSCRIPTION_PATTERN = /^20[a-f0-9]{64}ac0063036f72640101[a-f0-9]*68$/
 
 async function onSchedule(test) {
 
-  let inscription = /^20[a-f0-9]{64}ac0063036f72640101/
-
   try {
+
+
+    // for (var y = 1; y < 102; y++) {
+    //   let l = ''
+    //   for (var x = 1; x < 102; x++) {
+    //     l += getKind(x, y) + ';'
+    //   }
+    //   console.log(l)
+    // }
+
     logger.log('start')
 
     var time = Math.floor(new Date().getTime() / 1000) - ((test ? 1 : 24) * 60 * 60)
@@ -46,16 +65,22 @@ async function onSchedule(test) {
 
     var ins = {}
     var outs = {'coinbase': {count: 0, value: 0}, 'fee': {count:0, value: 0}}
-    let ordinals = {}
     let blockStats = {}
+    let kinds = {}
+    let inscriptions = {}
     let totalWeight = 0
 
     var lastBlock = block.height;
 
+    let oneins = new Set()
+    let oneouts = new Set()
+    let oneone = []
+
     while(time < block.time) {
 
-      let currentBlockOrdinal = {}
-      blockStats[block.height] = {total: block.weight, inscriptions: currentBlockOrdinal}
+      let currentBlockInscriptions = {}
+      let currentBlockKinds = {}
+      blockStats[block.height] = {total: block.weight, inscriptions: currentBlockInscriptions, kinds: currentBlockKinds}
 
       var fee = 0
 
@@ -74,7 +99,7 @@ async function onSchedule(test) {
         for (var vout of tx.vout) {
           var type = vout.scriptPubKey.type
 
-          if (types.indexOf(type) === -1) types.push(type)
+          if (TYPES.indexOf(type) === -1) TYPES.push(type)
 
           if (typeof outs[type] === 'undefined') {
             outs[type] = {count : 0, value : 0}
@@ -90,7 +115,7 @@ async function onSchedule(test) {
           var prevout = vin.prevout
           var type = prevout.scriptPubKey.type
 
-          if (types.indexOf(type) === -1) types.push(type)
+          if (TYPES.indexOf(type) === -1) TYPES.push(type)
 
           if (typeof ins[type] === 'undefined') {
             ins[type] = {count : 0, value : 0}
@@ -106,7 +131,7 @@ async function onSchedule(test) {
 
           if (prevout.scriptPubKey.type === 'witness_v1_taproot') {
             for (var txinwitness of vin.txinwitness) {
-              if(txinwitness.match(inscription)) {
+              if(txinwitness.match(INSCRIPTION_PATTERN)) {
                 inscriptionCount++
                 let length = parseInt(txinwitness.substring(84, 86), 16)
                 content_type = Buffer.from(txinwitness.substring(86, 86 + (length * 2)), "hex").toString("utf-8").split(';')[0].split('+')[0].split('/')[1]
@@ -116,22 +141,47 @@ async function onSchedule(test) {
         }
 
         if (inscriptionCount === 1) {
-          let ordinal = ordinals[content_type]
-          if (!ordinal) {
-            ordinal = {count: 0, size: 0}
-            ordinals[content_type] = ordinal
+          let totalInscriptions = inscriptions[content_type]
+          if (!totalInscriptions) {
+            totalInscriptions = {count: 0, size: 0}
+            inscriptions[content_type] = totalInscriptions
           }
-          ordinal.count++
-          ordinal.size += tx.weight
+          totalInscriptions.count++
+          totalInscriptions.size += tx.weight
 
-          let currentOrdinal = currentBlockOrdinal[content_type]
-          if (!currentOrdinal) {
-            currentOrdinal = {count: 0, size: 0}
-            currentBlockOrdinal[content_type] = currentOrdinal
+          let currentInscriptions = currentBlockInscriptions[content_type]
+          if (!currentInscriptions) {
+            currentInscriptions = {count: 0, size: 0}
+            currentBlockInscriptions[content_type] = currentInscriptions
           }
-          currentOrdinal.count++
-          currentOrdinal.size += tx.weight
+          currentInscriptions.count++
+          currentInscriptions.size += tx.weight
         }
+        // if (tx.vin.length === 1 && tx.vout.length === 1) {
+        //   let inaddr = tx.vin[0].prevout.scriptPubKey.address
+        //   let outaddr = tx.vout[0].scriptPubKey.address
+        //   oneins.add(inaddr)
+        //   oneouts.add(outaddr)
+        //   oneone.push([inaddr, outaddr])
+        // }
+
+        let kind = inscriptionCount === 0 ? getKind(tx.vin.length, tx.vout.length) : 'Inscript.'
+
+        let totalKind = kinds[kind]
+        if (!totalKind) {
+          totalKind = {count: 0, size: 0}
+          kinds[kind] = totalKind
+        }
+        totalKind.count++
+        totalKind.size += tx.weight
+
+        let currentKind = currentBlockKinds[kind]
+        if (!currentKind) {
+          currentKind = {count: 0, size: 0}
+          currentBlockKinds[kind] = currentKind
+        }
+        currentKind.count++
+        currentKind.size += tx.weight
       }
 
       outs['coinbase'].value += block.tx[0].vout[0].value - fee
@@ -140,7 +190,7 @@ async function onSchedule(test) {
       totalWeight += block.weight
 
       // if (test) {
-      //   console.log(JSON.stringify({height: block.height, weight: block.weight, inscriptions: Object.fromEntries(ordinals)}))
+      //   console.log(JSON.stringify({height: block.height, weight: block.weight, inscriptions: Object.fromEntries(inscriptions)}))
       // }
 
       var firstBlock = block.height;
@@ -148,6 +198,36 @@ async function onSchedule(test) {
       blockHash = block.previousblockhash
       block = await bitcoin_rpc.getBlock(blockHash, 3)
     }
+
+    oneone.forEach((entry) => {
+      let i = entry[0]
+      let o = entry[1]
+      if (oneins.has(o) || oneouts.has(i)) {
+        console.log(`${i} -> ${o}`)
+      }
+    })
+    
+    // for (let [in, out] of ) {
+
+    // }
+
+    console.log(`Blocks: ${Object.keys(blockStats).length}`)
+
+    // let sortedKinds = Object.entries(kinds).sort(([,a],[,b]) => b.size-a.size)
+
+    // let rest = {size: 0, count: 0}
+
+    // for (let [kind, stats] of sortedKinds) {
+    //   let percentage = stats.size / totalWeight * 100
+    //   if (percentage > 0.5) {
+    //     console.log(`${kind} ${stats.count} ${formatSize(stats.size)} (${formatPercentage(percentage)}) ${formatSize(Math.round(stats.size / stats.count))}/tx`)
+    //   } else {
+    //     rest.size += stats.size
+    //     rest.count++
+    //   }
+    // }
+    // let restPercentage = rest.size / totalWeight * 100
+    // console.log(`others ${rest.count} ${formatSize(rest.size)} (${formatPercentage(restPercentage)}) ${formatSize(Math.round(rest.size / rest.count))}/tx`)
 
     Object.values(ins).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
     Object.values(outs).forEach(entry => entry.value = Number(entry.value.toFixed(8)))
@@ -196,28 +276,32 @@ Total: ${in_count} in, ${out_count} out`
       fs.writeFileSync('image2.png', buffer2)
     }
 
+
+    let max_length = 280 - config.twitter.screen_name.length - 2
+
+    // Kinds
+
     let totalSize = 0
     let totalCount = 0
 
-    Object.values(ordinals).forEach(ordinal => {totalSize += ordinal.size; totalCount += ordinal.count})
+    Object.values(kinds).forEach(kind => {totalSize += kind.size; totalCount += kind.count})
     
-    let sortedOrdinals = Object.entries(ordinals).sort(([,a],[,b]) => b.size-a.size)
+    let sortedKinds = Object.entries(kinds).sort(([,a],[,b]) => b.size-a.size)
 
-    var text3 = `Ordinals:
+    var text3 = `Kinds:
 
-Total: ${totalCount}, ${formatSize(totalSize)} (${formatPercentage(totalSize * 100 / totalWeight)})
+Total: ${totalCount}, ${formatSize(totalSize)}
 `
-    let max_length = 280 - config.twitter.screen_name.length - 2
-    for (var [content_type, ordinal] of sortedOrdinals) {
+    for (var [kind, stats] of sortedKinds) {
       let line = `
-${content_type.toUpperCase()}: ${ordinal.count}, ${formatSize(ordinal.size)} (${formatPercentage(ordinal.size * 100 / totalWeight)})`
+${kind}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(stats.size * 100 / totalWeight)})`
       if (line.length + text3.length > max_length) break
       text3 += line
     }
 
-    var inscriptionsHeader = `Inscriptions: ${totalCount}, ${formatSize(totalSize)} (${formatPercentage(totalSize * 100 / totalWeight)})`
+    var kindsHeader = `Kinds: ${totalCount}, ${formatSize(totalSize)}`
 
-    var buffer3 = createInscriptionImage(blockStats, inscriptionsHeader, caption, date)
+    var buffer3 = createInscriptionImage(blockStats, kindsHeader, caption, date, sortedKinds.map(e => e[0]), 'kinds', kinds)
 
     if (!test) {
       var media3 = await twitter.postMediaUpload(buffer3);
@@ -225,6 +309,39 @@ ${content_type.toUpperCase()}: ${ordinal.count}, ${formatSize(ordinal.size)} (${
     } else {
       logger.log(`Tweet: ${text3}`)
       fs.writeFileSync('image3.png', buffer3)
+    }
+
+
+    // Inscriptions
+
+    let totalIncriptionSize = 0
+    let totalInscriptionCount = 0
+
+    Object.values(inscriptions).forEach(inscription => {totalIncriptionSize += inscription.size, totalInscriptionCount += inscription.count})
+    
+    let sortedInscriptions = Object.entries(inscriptions).sort(([,a],[,b]) => b.size-a.size)
+
+    var text4 = `Inscriptions:
+
+Total: ${totalInscriptionCount}, ${formatSize(totalIncriptionSize)} (${formatPercentage(totalIncriptionSize * 100 / totalWeight)})
+`
+    for (var [content_type, stats] of sortedInscriptions) {
+      let line = `
+${content_type}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(stats.size * 100 / totalWeight)})`
+      if (line.length + text4.length > max_length) break
+      text4 += line
+    }
+
+    var inscriptionsHeader = `Inscriptions: ${totalInscriptionCount}, ${formatSize(totalIncriptionSize)} (${formatPercentage(totalIncriptionSize * 100 / totalWeight)})`
+
+    var buffer4 = createInscriptionImage(blockStats, inscriptionsHeader, caption, date, sortedInscriptions.map(e => e[0]), 'inscriptions', inscriptions)
+
+    if (!test) {
+      var media4 = await twitter.postMediaUpload(buffer4);
+      var tweet4 = await twitter.postStatus(text4, media4.media_id_string, tweet3.id_str)
+    } else {
+      logger.log(`Tweet: ${text4}`)
+      fs.writeFileSync('image4.png', buffer4)
     }
 
     logger.log('finished')
@@ -283,7 +400,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
   var gap1 = gapsize / (Object.values(ins).filter(entry => entry[key] > 0).length - 1)
   var gap2 = 0
 
-  for (var type of types) {
+  for (var type of TYPES) {
     if (ins.hasOwnProperty(type)) {
 
       var value = ins[type][key]
@@ -331,7 +448,7 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
 
   var gap = gapsize / (Object.values(outs).filter(entry => entry[key] > 0).length - 1)
 
-  for (var type of types) {
+  for (var type of TYPES) {
     if (outs.hasOwnProperty(type)) {
 
       var value = outs[type][key]
@@ -376,9 +493,8 @@ function createImage(ins, outs, key, header, caption, date, formatter) {
   return canvas.toBuffer();
 }
 
-function createInscriptionImage(blockStats, header, caption, date, formatter) {
+function createInscriptionImage(blockStats, header, caption, date, keys, tag, totalStats) {
   try {
-    if (typeof formatter === 'undefined') formatter = value => value
     const canvas = createCanvas(1200, 600)
     const ctx = canvas.getContext('2d')
   
@@ -405,64 +521,82 @@ function createInscriptionImage(blockStats, header, caption, date, formatter) {
     ctx.font = `12px DejaVu Sans Mono`
     ctx.fillText(date, cx, 50)
     ctx.fillText(caption, cx, 580)
-  
-    let blockStep = 1100 / Object.keys(blockStats).length
+
+    let blockStep = 1050 / Object.keys(blockStats).length
     let blockWidth = blockStep / 2
   
-    let x = 50 + blockWidth
+    let x = blockWidth + 10
 
-    let totalHeight = 450
+    let totalHeight = 490
 
     let heightRatio = Math.round(4_000_000 / totalHeight) // 4MB max block size, 500 pixels
 
-    let content_types = []
-  
     for (let [block, stats] of Object.entries(blockStats)) {
 
-      let y = 70 + totalHeight
-
       let total = Math.round(stats.total / heightRatio)
+      
+      let y = totalHeight + 60
 
       ctx.beginPath()
       ctx.rect(Math.floor(x - blockWidth), y - total, Math.ceil(blockStep), total)
-      ctx.fillStyle = 'blue'
+      ctx.fillStyle = 'grey'
       ctx.fill()
       
-      for (let [content_type, ordinals] of Object.entries(stats.inscriptions)) {
+      for (var i in keys) {
+        let key = keys[i]
 
-        if (!content_types.includes(content_type)) content_types.push(content_type)
-
-        let height = Math.round(ordinals.size / heightRatio)
-        y -= height
-
-        ctx.beginPath()
-        ctx.rect(Math.floor(x - blockWidth), y, Math.ceil(blockStep), height)
-        ctx.fillStyle = `#${createHash(content_type, 3)}`
-        ctx.fill()
+        let blockStats = stats[tag][key]
+        if (blockStats) {
+          let height = Math.round(blockStats.size / heightRatio)
+          y -= height
+    
+          ctx.beginPath()
+          ctx.rect(Math.floor(x - blockWidth), y, Math.ceil(blockStep), height)
+          ctx.fillStyle = MPN65[i]
+          ctx.fill()
+        }
       }
   
       if (block % 10 == 0) {        
         ctx.font = `12px DejaVu Sans Mono`
         ctx.fillStyle = 'black'
-        ctx.fillText(block, x, totalHeight + 85)
+        ctx.fillText(block, x, 560)
       }
   
       x += blockStep
     }
 
-    ctx.textAlign = 'left'
+    let totalSize = 0
+    Object.values(totalStats).forEach(kind => {totalSize += kind.size})
 
-    x = 60
-    for (var content_type of content_types) {
+    let y = 65
+    for (var i in keys) {
+      let key = keys[i]
+
       ctx.beginPath()
-      ctx.rect(x, totalHeight + 100, 10, 10)
-      ctx.fillStyle = `#${createHash(content_type, 3)}`
+      ctx.rect(1065, y - 5, 10, 10)
+      ctx.fillStyle = MPN65[i]
       ctx.fill()
 
       ctx.fillStyle = 'black'
-      ctx.fillText(content_type, x + 15, totalHeight + 105)
+      ctx.textAlign = 'left'
+      let arrowIndex = key.indexOf('→')
+      let pad = ''
+      if (arrowIndex !== -1) {
+        while (pad.length < 5 - arrowIndex) pad += ' '
+      } else {
+        while (pad.length < 5 - (key.length / 2)) pad += ' '
+      }
+      ctx.fillText(pad + key, 1080, y)
 
-      x += ctx.measureText(content_type).width + 30
+      // ctx.textAlign = 'right'
+      let percentage = formatPercentage(totalStats[key].size / totalSize * 100)
+      if (percentage.indexOf('.') === 1) percentage = ' ' + percentage
+      ctx.fillText(percentage, 1155, y)
+
+      y += 20
+
+      if (y > 550) break
     }
   
     return canvas.toBuffer();
@@ -472,9 +606,26 @@ function createInscriptionImage(blockStats, header, caption, date, formatter) {
   }
 }
 
-function createHash(data, len) {
-  return crypto.createHash("shake256", { outputLength: len }).update(data).digest("hex");
+function getKind(i, o) {
+  if (i > 5 && o === 1) return `Consolid.`
+  if (i >= 50 && o === 2) return `Consolid.`
+  if (i <= 2 && o <= 2) return `${i} → ${o}`
+  if (i === 5 && o === 5) return `${i} → ${o}`
+  if (i === 1 && o >= 10) return `Batch`
+  if (i < 10 && o >= 100) return `Batch`
+  return `${aggr(i)} → ${aggr(o)}`
 }
+
+function aggr(len) {
+  if (len >= 100) return '100s'
+  if (len >= 10) return '10s'
+  if (len >= 4) return 'Few'
+  return len
+}
+
+// function createHash(data, len) {
+//   return crypto.createHash("shake256", { outputLength: len }).update(data).digest("hex");
+// }
 
 function valueFormatter(value) {
   if (value < 0.000001) return `${(value * 1e8).toFixed(0)} sats`
