@@ -58,7 +58,7 @@ async function onSchedule(test) {
 
     logger.log('start')
 
-    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 1 : 24) * 60 * 60)
+    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 24 : 24) * 60 * 60)
 
     var blockHash = await bitcoin_rpc.getBestBlockHash()
     var block = await bitcoin_rpc.getBlock(blockHash, 3)
@@ -596,7 +596,7 @@ function createInscriptionImage(blockStats, header, caption, date, keys, tag, to
 
       y += 20
 
-      if (y > 550) break
+      // if (y > 550) break
     }
   
     return canvas.toBuffer();
@@ -607,8 +607,8 @@ function createInscriptionImage(blockStats, header, caption, date, keys, tag, to
 }
 
 function getKind(i, o) {
-  if (i > 5 && o === 1) return `Consolid.`
-  if (i >= 50 && o === 2) return `Consolid.`
+  if (i > 1 && o === 1) return `Consolid.`
+  if (i >= 10 && o === 2) return `Consolid.`
   if (i <= 2 && o <= 2) return `${i} → ${o}`
   if (i === 5 && o === 5) return `${i} → ${o}`
   if (i === 1 && o >= 10) return `Batch`
@@ -619,7 +619,7 @@ function getKind(i, o) {
 function aggr(len) {
   if (len >= 100) return '100s'
   if (len >= 10) return '10s'
-  if (len >= 4) return 'Few'
+  if (len >= 3) return 'Few'
   return len
 }
 
