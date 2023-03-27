@@ -58,7 +58,7 @@ async function onSchedule(test) {
 
     logger.log('start')
 
-    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 24 : 24) * 60 * 60)
+    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 4 : 24) * 60 * 60)
 
     var blockHash = await bitcoin_rpc.getBestBlockHash()
     var block = await bitcoin_rpc.getBlock(blockHash, 3)
@@ -140,7 +140,18 @@ async function onSchedule(test) {
           }
         }
 
-        if (inscriptionCount === 1) {
+        let fakeMultiSig = 0
+        for (var vout of tx.vout) {
+          if (vout.scriptPubKey.hex.match('^51(210[23][0-9a-f]{64})+53ae$')) {
+            fakeMultiSig++
+          }
+        }
+        if (fakeMultiSig > 0) {
+          inscriptionCount++
+          content_type = 'cntrprty'
+        }
+
+        if (inscriptionCount > 0) {
           let totalInscriptions = inscriptions[content_type]
           if (!totalInscriptions) {
             totalInscriptions = {count: 0, size: 0}
@@ -589,7 +600,6 @@ function createInscriptionImage(blockStats, header, caption, date, keys, tag, to
       }
       ctx.fillText(pad + key, 1080, y)
 
-      // ctx.textAlign = 'right'
       let percentage = formatPercentage(totalStats[key].size / totalSize * 100)
       if (percentage.indexOf('.') === 1) percentage = ' ' + percentage
       ctx.fillText(percentage, 1155, y)
