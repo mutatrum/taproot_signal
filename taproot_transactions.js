@@ -42,7 +42,7 @@ const MPN65 = [/*'#ff0029',*/ '#377eb8', '#66a61e', '#984ea3', '#00d2d5', '#ff7f
                '#f883b0', '#a49100', '#f48800', '#27d0df', '#a04a9b']
 
 let INSCRIPTION_PATTERN = /^20[a-f0-9]{64}ac0063036f72640101[a-f0-9]*68$/
-
+let BRC20_PATTERN = /^20117f692257b2331233b5705ce9c682be8719ff1b2b64cbca290bd6faeb54423eac.{10}8701750063036f7264010118746578742f706c61696e3b636861727365743d7574662d3800.{2,4}(7b.*7d)68$/
 async function onSchedule(test) {
 
   try {
@@ -58,7 +58,7 @@ async function onSchedule(test) {
 
     logger.log('start')
 
-    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 4 : 24) * 60 * 60)
+    var time = Math.floor(new Date().getTime() / 1000) - ((test ? 24 : 24) * 60 * 60)
 
     var blockHash = await bitcoin_rpc.getBestBlockHash()
     var block = await bitcoin_rpc.getBlock(blockHash, 3)
@@ -68,6 +68,7 @@ async function onSchedule(test) {
     let blockStats = {}
     let kinds = {}
     let inscriptions = {}
+    let brc20s = {}
     let totalWeight = 0
 
     var lastBlock = block.height;
@@ -79,8 +80,9 @@ async function onSchedule(test) {
     while(time < block.time) {
 
       let currentBlockInscriptions = {}
+      let currentBRC20 = {}
       let currentBlockKinds = {}
-      blockStats[block.height] = {total: block.weight, inscriptions: currentBlockInscriptions, kinds: currentBlockKinds}
+      blockStats[block.height] = {total: block.weight, inscriptions: currentBlockInscriptions, brc20s: currentBRC20, kinds: currentBlockKinds}
 
       var fee = 0
 
@@ -109,7 +111,9 @@ async function onSchedule(test) {
         }
 
         let inscriptionCount = 0
+        let brc20Count = 0;
         let content_type = null
+        let kind = null
 
         for (var vin of tx.vin) {
           var prevout = vin.prevout
@@ -135,6 +139,27 @@ async function onSchedule(test) {
                 inscriptionCount++
                 let length = parseInt(txinwitness.substring(84, 86), 16)
                 content_type = Buffer.from(txinwitness.substring(86, 86 + (length * 2)), "hex").toString("utf-8").split(';')[0].split('+')[0].split('/')[1]
+                continue;
+              }
+              var brc20_match = txinwitness.match(BRC20_PATTERN)
+              if(brc20_match) {
+                brc20Count++;
+                try {
+                  var json = JSON.parse(Buffer.from(brc20_match[1], "hex").toString("utf-8"))
+                  if (json.p === 'brc-20') {
+                    content_type = json.op.substring(0, 4) + ' ' + json.tick
+                  } else {
+                    content_type = json.p + ' ' + json.op
+                  }
+                }
+                catch (syntaxError) {
+                  content_type = 'brc-20 invalid'
+                }
+                continue;
+              }
+              var text = Buffer.from(txinwitness, "hex").toString("utf-8")
+              if (text.indexOf('ord') != -1 && text.indexOf('text/plain') != -1) {
+                content_type = 'brc-20 text'
               }
             }
           }
@@ -152,21 +177,43 @@ async function onSchedule(test) {
         }
 
         if (inscriptionCount > 0) {
-          let totalInscriptions = inscriptions[content_type]
-          if (!totalInscriptions) {
-            totalInscriptions = {count: 0, size: 0}
-            inscriptions[content_type] = totalInscriptions
+          let total = inscriptions[content_type]
+          if (!total) {
+            total = {count: 0, size: 0}
+            inscriptions[content_type] = total
           }
-          totalInscriptions.count++
-          totalInscriptions.size += tx.weight
+          total.count++
+          total.size += tx.weight
 
-          let currentInscriptions = currentBlockInscriptions[content_type]
-          if (!currentInscriptions) {
-            currentInscriptions = {count: 0, size: 0}
-            currentBlockInscriptions[content_type] = currentInscriptions
+          let current = currentBlockInscriptions[content_type]
+          if (!current) {
+            current = {count: 0, size: 0}
+            currentBlockInscriptions[content_type] = current
           }
-          currentInscriptions.count++
-          currentInscriptions.size += tx.weight
+          current.count++
+          current.size += tx.weight
+
+          kind = 'Inscript.'
+        }
+
+        if (brc20Count > 0) {
+          let total = brc20s[content_type]
+          if (!total) {
+            total = {count: 0, size: 0}
+            brc20s[content_type] = total
+          }
+          total.count++
+          total.size += tx.weight
+
+          let current = currentBRC20[content_type]
+          if (!current) {
+            current = {count: 0, size: 0}
+            currentBRC20[content_type] = current
+          }
+          current.count++
+          current.size += tx.weight
+
+          kind = 'BRC-20'
         }
         // if (tx.vin.length === 1 && tx.vout.length === 1) {
         //   let inaddr = tx.vin[0].prevout.scriptPubKey.address
@@ -176,7 +223,9 @@ async function onSchedule(test) {
         //   oneone.push([inaddr, outaddr])
         // }
 
-        let kind = inscriptionCount === 0 ? getKind(tx.vin.length, tx.vout.length) : 'Inscript.'
+        if (!kind) {
+          kind = getKind(tx.vin.length, tx.vout.length)
+        }
 
         let totalKind = kinds[kind]
         if (!totalKind) {
@@ -325,16 +374,16 @@ ${kind}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(stats.siz
 
     // Inscriptions
 
-    let totalIncriptionSize = 0
+    let totalInscriptionSize = 0
     let totalInscriptionCount = 0
 
-    Object.values(inscriptions).forEach(inscription => {totalIncriptionSize += inscription.size, totalInscriptionCount += inscription.count})
+    Object.values(inscriptions).forEach(inscription => {totalInscriptionSize += inscription.size, totalInscriptionCount += inscription.count})
     
     let sortedInscriptions = Object.entries(inscriptions).sort(([,a],[,b]) => b.size-a.size)
 
     var text4 = `Inscriptions:
 
-Total: ${totalInscriptionCount}, ${formatSize(totalIncriptionSize)} (${formatPercentage(totalIncriptionSize * 100 / totalWeight)})
+Total: ${totalInscriptionCount}, ${formatSize(totalInscriptionSize)} (${formatPercentage(totalInscriptionSize * 100 / totalWeight)})
 `
     for (var [content_type, stats] of sortedInscriptions) {
       let line = `
@@ -343,7 +392,7 @@ ${content_type}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(s
       text4 += line
     }
 
-    var inscriptionsHeader = `Inscriptions: ${totalInscriptionCount}, ${formatSize(totalIncriptionSize)} (${formatPercentage(totalIncriptionSize * 100 / totalWeight)})`
+    var inscriptionsHeader = `Inscriptions: ${totalInscriptionCount}, ${formatSize(totalInscriptionSize)} (${formatPercentage(totalInscriptionSize * 100 / totalWeight)})`
 
     var buffer4 = createInscriptionImage(blockStats, inscriptionsHeader, caption, date, sortedInscriptions.map(e => e[0]), 'inscriptions', inscriptions)
 
@@ -353,6 +402,39 @@ ${content_type}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(s
     } else {
       logger.log(`Tweet: ${text4}`)
       fs.writeFileSync('image4.png', buffer4)
+    }
+
+
+    // BRC20s
+
+    let totalBRC20Size = 0
+    let totalBRC20Count = 0
+
+    Object.values(brc20s).forEach(brc20 => {totalBRC20Size += brc20.size, totalBRC20Count += brc20.count})
+    
+    let sortedBRC20s = Object.entries(brc20s).sort(([,a],[,b]) => b.size-a.size)
+
+    var text5 = `BRC-20:
+
+Total: ${totalBRC20Count}, ${formatSize(totalBRC20Size)} (${formatPercentage(totalBRC20Size * 100 / totalWeight)})
+`
+    for (var [content_type, stats] of sortedBRC20s) {
+      let line = `
+${content_type}: ${stats.count}, ${formatSize(stats.size)} (${formatPercentage(stats.size * 100 / totalWeight)})`
+      if (line.length + text5.length > max_length) break
+      text5 += line
+    }
+
+    var BRC20sHeader = `BRC-20: ${totalBRC20Count}, ${formatSize(totalBRC20Size)} (${formatPercentage(totalBRC20Size * 100 / totalWeight)})`
+
+    var buffer5 = createInscriptionImage(blockStats, BRC20sHeader, caption, date, sortedBRC20s.map(e => e[0]), 'brc20s', brc20s)
+
+    if (!test) {
+      var media5 = await twitter.postMediaUpload(buffer5);
+      var tweet5 = await twitter.postStatus(text5, media5.media_id_string, tweet4.id_str)
+    } else {
+      logger.log(`Tweet: ${text5}`)
+      fs.writeFileSync('image5.png', buffer5)
     }
 
     logger.log('finished')
