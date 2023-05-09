@@ -147,7 +147,7 @@ async function onSchedule(test) {
                 try {
                   var json = JSON.parse(Buffer.from(brc20_match[1], "hex").toString("utf-8"))
                   if (json.p === 'brc-20') {
-                    content_type = json.op.substring(0, 4) + ' ' + json.tick
+                    content_type = json.op.substring(0, 4) + ' ' + json.tick.toLowerCase()
                   } else {
                     content_type = json.p + ' ' + json.op
                   }
