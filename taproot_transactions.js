@@ -42,7 +42,7 @@ const MPN65 = [/*'#ff0029',*/ '#377eb8', '#66a61e', '#984ea3', '#00d2d5', '#ff7f
                '#f883b0', '#a49100', '#f48800', '#27d0df', '#a04a9b']
 
 let INSCRIPTION_PATTERN = /^20[a-f0-9]{64}ac0063036f72640101[a-f0-9]*68$/
-let BRC20_PATTERN = /^20117f692257b2331233b5705ce9c682be8719ff1b2b64cbca290bd6faeb54423eac.{10}8701750063036f7264010118746578742f706c61696e3b636861727365743d7574662d3800.{2,4}(7b.*7d)68$/
+let BRC20_PATTERN = /^20117f692257b2331233b5705ce9c682be8719ff1b2b64cbca290bd6faeb54423eac.{12}01750063036f7264010118746578742f706c61696e3b636861727365743d7574662d3800.{2,4}(7b.*7d)68$/
 async function onSchedule(test) {
 
   try {
@@ -86,7 +86,7 @@ async function onSchedule(test) {
 
       var fee = 0
 
-      var txids = new Set()
+      var txids = new Map()
 
       if (test) {
         logger.log(`Height ${block.height}`)
@@ -94,7 +94,7 @@ async function onSchedule(test) {
 
       for (var tx of block.tx.splice(1)) {
 
-        txids.add(tx.txid)
+        txids.set(tx.txid, tx.fee / tx.vsize)
 
         fee += tx.fee
 
@@ -115,6 +115,8 @@ async function onSchedule(test) {
         let content_type = null
         let kind = null
 
+        let isCPFP = false
+
         for (var vin of tx.vin) {
           var prevout = vin.prevout
           var type = prevout.scriptPubKey.type
@@ -129,6 +131,12 @@ async function onSchedule(test) {
           if (txids.has(vin.txid)) {
             // Transaction is spent in same block
             outs[type].value -= prevout.value
+            let feeRate = tx.fee / tx.vsize
+            // console.log(`${txids.get(vin.txid)} < ${feeRate}`)
+            if (txids.get(vin.txid) < feeRate) {
+              // console.log(tx)
+              isCPFP = true
+            }
           } else {
             ins[type].value += prevout.value
           }
@@ -225,6 +233,9 @@ async function onSchedule(test) {
 
         if (!kind) {
           kind = getKind(tx.vin.length, tx.vout.length)
+
+          // if (tx.txid == '12afa4bfab373ac148e4ad9145d39329105fb56a7027cd7253d2b7c7027c5b86') console.log(tx)
+          // if (isCPFP) kind += ' C' //console.log(tx.txid) // kind != '1 → 1' && 
         }
 
         let totalKind = kinds[kind]
